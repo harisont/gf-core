@@ -31,6 +31,12 @@
 See: https://www.grammaticalframework.org/doc/runtime-api.html#java
 
 ## Running tests
-```
-java -Djava.library.path=/usr/local/lib/ Test
-```
+1. [Download `JUnit` and `hamcrest-core`'s `jar`s](https://github.com/junit-team/junit4/wiki/Download-and-Install) to the current folder 
+2. Compile with
+   ```
+   javac -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar TestBasic.java
+   ```
+3. Run with 
+   ```
+   java -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar org.junit.runner.JUnitCore TestBasic
+   ```
