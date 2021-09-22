@@ -1,7 +1,7 @@
 # Java bindings to C runtime
 
 ## Pre-requisites
-1. You must have installed the PGF C runtime (see `../c/README.md`)
+1. You must have installed the PGF C runtime (see [`../c/README.md`](../c/README.md))
 2. You will need a Java Development Kit, for instance the [open JDK](https://openjdk.java.net/)
 
 ## Installation
