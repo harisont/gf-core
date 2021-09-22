@@ -10,7 +10,18 @@ public class TestBasic {
   // readPGF
 
   @Test
-  public void readPGFNonExistantThrowsFileNotFoundException() {
+  public void readPGFOnBasicPGFDoesNotThrowExceptions() {
+    boolean thrown = false;
+    try {
+      PGF.readPGF("../haskell/tests/basic.pgf");
+    } catch (Exception e) {
+      thrown = true;
+    }
+  assertFalse(thrown);
+  }
+  
+  @Test
+  public void readPGFOnNonExistantThrowsFileNotFoundException() {
     boolean thrown = false;
     try {
       PGF.readPGF("nonexistant.pgf");
