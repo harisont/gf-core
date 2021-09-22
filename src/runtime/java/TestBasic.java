@@ -1,12 +1,14 @@
 import java.io.FileNotFoundException;
 
 import org.junit.Test;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import org.grammaticalframework.pgf.*;
 
 public class TestBasic {
   
+  // readPGF
+
   @Test
   public void readPGFNonExistantThrowsFileNotFoundException() {
     boolean thrown = false;
