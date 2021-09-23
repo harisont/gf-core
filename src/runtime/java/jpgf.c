@@ -1,7 +1,5 @@
 #include <pgf/pgf.h>
 #include <pgf/linearizer.h>
-#include <gu/mem.h>
-#include <gu/exn.h>
 #include <math.h>
 #include <jni.h>
 #include "jni_utils.h"
@@ -16,37 +14,41 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
 
 JNIEXPORT jobject JNICALL 
 Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring s)
-{ 
-	GuPool* pool = gu_new_pool();
-	GuPool* tmp_pool = gu_local_pool();
+{ 	
+	// init a PGF object
+	PGFObj *pgfObj = (PGFObject *)pgf_PGFType.tp_alloc(&pgf_PGFType, 0); // TODO: define PGFObject, should have a db and a revision
+	// or initialization might look something like this:
+	//jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
+	//PGFObject pgfObj = (*env)->NewObject(env, cls, constrId, pgf);
+	
+	// init a PGF exception
+	PgfExn err;
 
-	// Create an exception frame that catches all errors.
-	GuExn* err = gu_exn(tmp_pool);
+	// get C-style file path string
+	const char *fpath = (*env)->GetStringUTFChars(env, s, 0);
 
-	const char *fpath = (*env)->GetStringUTFChars(env, s, 0); 
+	// read PGF from file and update the PGF object's db
+	pgfObj->db = pgf_read_pgf(fpath, &pgfObj->revision, &err);
 
-	// Read the PGF grammar.
-	PgfPGF* pgf = pgf_read(fpath, pool, err);
-
+	// mysterious thing one always has to do after a GetStringUTFChars to free something?
 	(*env)->ReleaseStringUTFChars(env, s, fpath);
 
-	if (!gu_ok(err)) {
-		if (gu_exn_caught(err, GuErrno)) {
-			throw_jstring_exception(env, "java/io/FileNotFoundException", s);
-		} else {
-			throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "The grammar cannot be loaded");
+	if (err.type == PGF_EXN_NONE) { // no errors: return the PGF object
+		return pgfObj
+	} else { // handle errors by throwing exceptions and return nothing
+		if (err.type == PGF_EXN_SYSTEM_ERROR) {
+		// I guess in this context system error == file not found...? Otherwise one could use err.msg, but with what class?
+		throw_jstring_exception(env, "java/io/FileNotFoundException", s);
+		} else if (err.type == PGF_EXN_PGF_ERROR) {
+		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
+		} else if (err.type == PGF_EXN_OTHER_ERROR) {
+		throw_string_exception(env, /*what class, if any? IOException?*/, "an unknown error occured");
 		}
-		gu_pool_free(pool);
-		gu_pool_free(tmp_pool);
 		return NULL;
 	}
-
-	gu_pool_free(tmp_pool);
-
-	jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
-	return (*env)->NewObject(env, cls, constrId, p2l(pool), p2l(pgf));
 }
 
+/*
 typedef struct {
 	GuInStream stream;
 	jobject java_stream;
@@ -1831,3 +1833,4 @@ Java_org_grammaticalframework_pgf_PGF_checkExpr(JNIEnv* env, jobject self, jobje
 
 	return jexpr;
 }
+*/
