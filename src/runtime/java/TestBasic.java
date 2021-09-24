@@ -58,7 +58,8 @@ public class TestBasic {
 
   // abstract syntax
   @Test
-  public void getAbstractName_PGF(PGF pgf) {
+  public void getAbstractName_PGF() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
     assertEquals("basic", pgf.getAbstractName()); 
   }
 }
