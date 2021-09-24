@@ -76,12 +76,12 @@ public class PGF {
 
 	//////////////////////////////////////////////////////////////////
 	// private stuff
-	private Pool pool;
-	private long ref;
+	private long db;
+	private long rev;
 
-	private PGF(long pool, long ref) {
-		this.pool = new Pool(pool);
-		this.ref  = ref;
+	private PGF(long db, long rev) {
+		this.db = db;
+		this.rev = rev;
 	}
 	
 	static { 
