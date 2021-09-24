@@ -11,7 +11,7 @@ public class TestBasic {
   // readPGF
 
   @Test
-  public void readPGFOnPGFDoesNotThrowExceptions() {
+  public void readPGF_PGF() {
     boolean thrown = false;
     try {
       PGF.readPGF("../haskell/tests/basic.pgf");
@@ -22,7 +22,7 @@ public class TestBasic {
   }
   
   @Test
-  public void readPGFOnNonExistantThrowsIOException() {
+  public void readPGF_NonExistant() {
     boolean thrown = false;
     try {
       PGF.readPGF("abc.pgf");
@@ -33,7 +33,7 @@ public class TestBasic {
   }
 
   @Test
-  public void readPGFOnGFThrowsPGFError() throws FileNotFoundException {
+  public void readPGF_GF() throws FileNotFoundException {
     boolean thrown = false;
     try {
       PGF.readPGF("../haskell/tests/basic.gf");
@@ -44,7 +44,7 @@ public class TestBasic {
   }
 
   @Test
-  public void readPGFOnNGFThrowsPGFError() throws FileNotFoundException {
+  public void readPGF_NGF() throws FileNotFoundException {
     boolean thrown = false;
     try {
       PGF.readPGF("basic.ngf");
