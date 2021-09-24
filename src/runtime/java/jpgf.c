@@ -15,26 +15,22 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
 JNIEXPORT jobject JNICALL 
 Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring s)
 { 	
-	// init a PGF object
-	PGFObj *pgfObj = (PGFObject *)pgf_PGFType.tp_alloc(&pgf_PGFType, 0); // TODO: define PGFObject, should have a db and a revision
-	// or initialization might look something like this:
-	//jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
-	//PGFObject pgfObj = (*env)->NewObject(env, cls, constrId, pgf);
-	
-	// init a PGF exception
+	// initialization
+	long rev = 0;
 	PgfExn err;
 
 	// get C-style file path string
 	const char *fpath = (*env)->GetStringUTFChars(env, s, 0);
 
 	// read PGF from file and update the PGF object's db
-	pgfObj->db = pgf_read_pgf(fpath, &pgfObj->revision, &err);
+	PgfDB* db = pgf_read_pgf(fpath, &rev, &err);
 
-	// mysterious thing one always has to do after a GetStringUTFChars to free something?
+	// release C-style file path string
 	(*env)->ReleaseStringUTFChars(env, s, fpath);
 
 	if (err.type == PGF_EXN_NONE) { // no errors: return the PGF object
-		return pgfObj
+		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
+		return (*env)->NewObject(env, cls, constrId, db, rev);
 	} else { // handle errors by throwing exceptions and return nothing
 		if (err.type == PGF_EXN_SYSTEM_ERROR) {
 		throw_jstring_exception(env, "java/io/IOException", s); 
@@ -44,6 +40,7 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 		// I guess it must be a runtime error but we don't have a class for that
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "an unknown error occured");
 		}
+		// TODO: cleanup? (of the errors? of the PGF object? )
 		return NULL;
 	}
 }
@@ -135,7 +132,7 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_io_InputStream_2(JNIEnv *en
 	GuExn* err = gu_exn(tmp_pool);
 
 	// Read the PGF grammar.
-	PgfPGF* pgf = pgf_read_in(in, pool, tmp_pool, err);
+	PGF* pgf = pgf_read_in(in, pool, tmp_pool, err);
 	if (!gu_ok(err)) {
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "The grammar cannot be loaded");
 		gu_pool_free(pool);
@@ -168,7 +165,7 @@ Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
 JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self, jstring jid)
 {
-	PgfPGF* pgf = get_ref(env, self);
+	PGF* pgf = get_ref(env, self);
 	GuPool* tmp_pool = gu_new_pool();
 	PgfCId id = j2gu_string(env, jid, tmp_pool);
 	PgfType* tp = pgf_function_type(pgf, id);
@@ -187,7 +184,7 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self,
 JNIEXPORT jdouble JNICALL
 Java_org_grammaticalframework_pgf_PGF_getFunctionProb(JNIEnv* env, jobject self, jstring jid)
 {
-	PgfPGF* pgf = get_ref(env, self);
+	PGF* pgf = get_ref(env, self);
 	GuPool* tmp_pool = gu_local_pool();
 	PgfCId id = j2gu_string(env, jid, tmp_pool);
 	prob_t prob = pgf_function_prob(pgf, id);
@@ -236,7 +233,7 @@ Java_org_grammaticalframework_pgf_PGF_getLanguages(JNIEnv* env, jobject self)
 	if (!put_method)
 		return NULL;
 
-	PgfPGF* pgf = get_ref(env, self);
+	PGF* pgf = get_ref(env, self);
 
 	GuPool* tmp_pool = gu_local_pool();
 
@@ -282,7 +279,7 @@ Java_org_grammaticalframework_pgf_PGF_getCategories(JNIEnv* env, jobject self)
 	if (!add_method)
 		return NULL;
 
-	PgfPGF* pgf = get_ref(env, self);
+	PGF* pgf = get_ref(env, self);
 
 	GuPool* tmp_pool = gu_local_pool();
 
@@ -317,7 +314,7 @@ Java_org_grammaticalframework_pgf_PGF_getFunctions(JNIEnv* env, jobject self)
 	if (!add_method)
 		return NULL;
 
-	PgfPGF* pgf = get_ref(env, self);
+	PGF* pgf = get_ref(env, self);
 
 	GuPool* tmp_pool = gu_local_pool();
 
@@ -352,7 +349,7 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject sel
 	if (!add_method)
 		return NULL;
 
-	PgfPGF* pgf = get_ref(env, self);
+	PGF* pgf = get_ref(env, self);
 
 	GuPool* tmp_pool = gu_local_pool();
 
