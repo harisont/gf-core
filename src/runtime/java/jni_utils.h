@@ -39,7 +39,10 @@ gu2j_string_len(JNIEnv *env, const char* s, size_t len);
 //j2gu_string_offset(GuString s, size_t joffset);
 
 JPGF_INTERNAL_DECL void*
-get_ref(JNIEnv *env, jobject self);
+get_db(JNIEnv *env, jobject self);
+
+JPGF_INTERNAL_DECL void*
+get_rev(JNIEnv *env, jobject self);
 
 JPGF_INTERNAL_DECL void
 throw_jstring_exception(JNIEnv *env, const char* class_name, jstring msg);

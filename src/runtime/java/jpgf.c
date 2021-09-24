@@ -146,11 +146,26 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_io_InputStream_2(JNIEnv *en
 	return (*env)->NewObject(env, cls, constrId, p2l(pool), p2l(pgf));
 }
 
+*/
+
 JNIEXPORT jstring JNICALL 
 Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 {
-	return gu2j_string(env, pgf_abstract_name(get_ref(env, self)));
+	PgfExn err;
+
+	PgfText* txt = pgf_abstract_name(get_db(env, self),get_rev(env, self),&err);
+
+	if (err.type != PGF_EXN_NONE) {
+		return NULL;
+	}
+	
+	//OLD: return p_text2j_string(env, pgf_abstract_name(get_ref(env, self)));
+	//return (*env)->NewString(env, /*unicode chars (from txt->text)*/, /*length of the new string (from txt->size)*/);
+	//return (*env)->NewString(env, NewStringUTF(txt->text), /*length of the new string (from txt->size)*/);
+	return (*env)->NewStringUTF(env,txt->text);
 }
+
+/*
 
 JNIEXPORT jstring JNICALL
 Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)

@@ -120,9 +120,15 @@ j2gu_string_offset(GuString s, size_t joffset) {
 }
 
 JPGF_INTERNAL void*
-get_ref(JNIEnv *env, jobject self) {
-	jfieldID refId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "ref", "J");
-	return l2p((*env)->GetLongField(env, self, refId));
+get_db(JNIEnv *env, jobject self) {
+	jfieldID dbId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "db", "J");
+	return l2p((*env)->GetLongField(env, self, dbId));
+}
+
+JPGF_INTERNAL void*
+get_rev(JNIEnv *env, jobject self) {
+	jfieldID revId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "rev", "J");
+	return l2p((*env)->GetLongField(env, self, revId));
 }
 
 JPGF_INTERNAL void
