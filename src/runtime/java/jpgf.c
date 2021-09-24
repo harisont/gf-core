@@ -37,10 +37,11 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 		} else if (err.type == PGF_EXN_PGF_ERROR) {
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
 		} else if (err.type == PGF_EXN_OTHER_ERROR) {
-		// I guess it must be a runtime error but we don't have a class for that
+		// I guess it must be a C runtime error but we don't have a class for that,
+		// copying from the Python bindings
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "an unknown error occured");
 		}
-		// TODO: cleanup? (of the errors? of the PGF object? )
+		// TODO: cleanup?
 		return NULL;
 	}
 }
@@ -153,15 +154,12 @@ Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 {
 	PgfExn err;
 
-	PgfText* txt = pgf_abstract_name(get_db(env, self),get_rev(env, self),&err);
+	PgfText* txt = pgf_abstract_name(get_db(env, self),(long)get_rev(env, self),&err);
 
 	if (err.type != PGF_EXN_NONE) {
+		// TODO: cleanup?
 		return NULL;
 	}
-	
-	//OLD: return p_text2j_string(env, pgf_abstract_name(get_ref(env, self)));
-	//return (*env)->NewString(env, /*unicode chars (from txt->text)*/, /*length of the new string (from txt->size)*/);
-	//return (*env)->NewString(env, NewStringUTF(txt->text), /*length of the new string (from txt->size)*/);
 	return (*env)->NewStringUTF(env,txt->text);
 }
 
