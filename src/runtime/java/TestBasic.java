@@ -1,3 +1,4 @@
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.junit.Test;
@@ -10,7 +11,7 @@ public class TestBasic {
   // readPGF
 
   @Test
-  public void readPGFOnBasicPGFDoesNotThrowExceptions() {
+  public void readPGFOnPGFDoesNotThrowExceptions() {
     boolean thrown = false;
     try {
       PGF.readPGF("../haskell/tests/basic.pgf");
@@ -24,10 +25,32 @@ public class TestBasic {
   public void readPGFOnNonExistantThrowsIOException() {
     boolean thrown = false;
     try {
-      PGF.readPGF("nonexistant.pgf");
+      PGF.readPGF("abc.pgf");
     } catch (IOException e) {
       thrown = true;
     }
   assertTrue(thrown);
+  }
+
+  @Test
+  public void readPGFOnGFThrowsPGFError() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      PGF.readPGF("../haskell/tests/basic.gf");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
+
+  @Test
+  public void readPGFOnNGFThrowsPGFError() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      PGF.readPGF("basic.ngf");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
   }
 }
