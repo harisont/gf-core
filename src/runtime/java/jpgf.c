@@ -37,12 +37,12 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 		return pgfObj
 	} else { // handle errors by throwing exceptions and return nothing
 		if (err.type == PGF_EXN_SYSTEM_ERROR) {
-		// I guess in this context system error == file not found...? Otherwise one could use err.msg, but with what class?
-		throw_jstring_exception(env, "java/io/FileNotFoundException", s);
+		throw_jstring_exception(env, "java/io/IOException", s); 
 		} else if (err.type == PGF_EXN_PGF_ERROR) {
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
 		} else if (err.type == PGF_EXN_OTHER_ERROR) {
-		throw_string_exception(env, /*what class, if any? IOException?*/, "an unknown error occured");
+		// I guess it must be a runtime error but we don't have a class for that
+		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "an unknown error occured");
 		}
 		return NULL;
 	}
