@@ -1,4 +1,4 @@
-import java.io.FileNotFoundException;
+import java.io.IOException;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -21,11 +21,11 @@ public class TestBasic {
   }
   
   @Test
-  public void readPGFOnNonExistantThrowsFileNotFoundException() {
+  public void readPGFOnNonExistantThrowsIOException() {
     boolean thrown = false;
     try {
       PGF.readPGF("nonexistant.pgf");
-    } catch (FileNotFoundException e) {
+    } catch (IOException e) {
       thrown = true;
     }
   assertTrue(thrown);
