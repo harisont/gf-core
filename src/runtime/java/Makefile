@@ -27,7 +27,7 @@ LIBTOOL = $(if $(shell command -v glibtool 2>/dev/null), glibtool, libtool)  --t
 all: libjpgf.la jpgf.jar
 
 libjpgf.la: $(patsubst %.c, %.lo, $(C_SOURCES))
-	$(LIBTOOL) --mode=link $(GCC) $(CFLAGS) -g -O -o libjpgf.la -shared $^ -rpath $(INSTALL_PATH)/lib -lgu -lpgf $(WINDOWS_LDFLAGS)
+	$(LIBTOOL) --mode=link $(GCC) $(CFLAGS) -g -O -o libjpgf.la -shared $^ -rpath $(INSTALL_PATH)/lib -lpgf $(WINDOWS_LDFLAGS)
 
 %.lo : %.c
 	$(LIBTOOL) --mode=compile $(GCC) $(CFLAGS) -g -O -c $(JNI_INCLUDES) $(WINDOWS_CCFLAGS) -std=c99 -shared $< -o $@
