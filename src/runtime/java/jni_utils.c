@@ -61,7 +61,7 @@ gu2j_string_buf(JNIEnv *env, GuStringBuf* sbuf) {
 	return gu2j_string_len(env, gu_string_buf_data(sbuf), gu_string_buf_length(sbuf));
 }
 
-JPGF_INTERNAL jstring
+/*JPGF_INTERNAL jstring
 gu2j_string_capit(JNIEnv *env, GuString s, PgfCapitState capit) {
 	const char* utf8 = s;
 	size_t len = strlen(s);
@@ -88,7 +88,7 @@ gu2j_string_capit(JNIEnv *env, GuString s, PgfCapitState capit) {
 	}
 
 	return (*env)->NewString(env, utf16, dst-utf16);
-}
+}*/
 
 JPGF_INTERNAL GuString
 j2gu_string(JNIEnv *env, jstring s, GuPool* pool) {
