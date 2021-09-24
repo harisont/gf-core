@@ -38,5 +38,6 @@ See: https://www.grammaticalframework.org/doc/runtime-api.html#java
    ```
 3. Run with 
    ```
-   java -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar org.junit.runner.JUnitCore TestBasic
+   java -Djava.library.path=PATH_TO_LIBS -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar org.junit.runner.JUnitCore TestBasicmake install
    ```
+   where PATH_TO_LIBS is the path where `make install` has put `jpgf` (see Installation step 2).
