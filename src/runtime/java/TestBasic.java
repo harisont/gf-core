@@ -53,4 +53,12 @@ public class TestBasic {
     }
     assertTrue(thrown);
   }
+
+  // TODO: bootNGF, readNGF, newNGF
+
+  // abstract syntax
+  @Test
+  public void getAbstractName_PGF(PGF pgf) {
+    assertEquals("basic", pgf.getAbstractName()); 
+  }
 }
