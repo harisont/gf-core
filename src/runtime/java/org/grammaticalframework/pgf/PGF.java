@@ -74,6 +74,9 @@ public class PGF {
 
 	public native String graphvizAbstractTree(Expr expr);
 
+	@Override
+	public native void finalize();
+
 	//////////////////////////////////////////////////////////////////
 	// private stuff
 	private long db;

@@ -41,9 +41,21 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 		// copying from the Python bindings
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "an unknown error occured");
 		}
-		// TODO: cleanup?
+		// call finalize method for cleanup
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
 		return NULL;
 	}
+}
+
+JNIEXPORT void JNICALL 
+Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
+{	
+	jfieldID dbID = (*env)->GetFieldID(env, self , "db", "J");
+    jfieldID revID = (*env)->GetFieldID(env, self , "id", "J");
+	PgfDB* db = (PgfDB*)(*env)->GetObjectField(env,self,dbID);
+	jlong rev = (*env)->GetLongField(env,self,revID);
+	pgf_free_revision(db, rev);
 }
 
 /*
@@ -157,10 +169,12 @@ Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 	PgfText* txt = pgf_abstract_name(get_db(env, self),(long)get_rev(env, self),&err);
 
 	if (err.type != PGF_EXN_NONE) {
-		// TODO: cleanup?
+		jclass cls = (*env)->GetObjectClass(env, self);
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
 		return NULL;
 	}
-	return (*env)->NewStringUTF(env,txt->text);
+	return (*env)->NewStringUTF(env, txt->text);
 }
 
 /*
