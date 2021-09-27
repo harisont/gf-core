@@ -170,7 +170,7 @@ Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 		(*env)->CallVoidMethod(env, cls, finalizeId);
 		return NULL;
 	}
-	return (*env)->NewStringUTF(env, txt->text);
+	return p_text2j_string(env, txt);
 }
 
 /*
