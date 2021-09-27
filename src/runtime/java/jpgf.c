@@ -36,12 +36,8 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 		throw_jstring_exception(env, "java/io/IOException", s); 
 		} else if (err.type == PGF_EXN_PGF_ERROR) {
 		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
-		} else if (err.type == PGF_EXN_OTHER_ERROR) {
-		// I guess it must be a C runtime error but we don't have a class for that,
-		// copying from the Python bindings
-		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "an unknown error occured");
 		}
-		// call finalize method for cleanup
+		// call finalize method for cleanup; this also happens when err.type == PGF_EXN_OTHER_ERROR
 		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
 		(*env)->CallVoidMethod(env, cls, finalizeId);
 		return NULL;
