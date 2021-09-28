@@ -1,20 +1,22 @@
 package org.grammaticalframework.pgf;
 
 import java.io.*;
+import java.nio.file.FileAlreadyExistsException;
 import java.util.*;
 
 /** This is the class for PGF grammars.*/
 public class PGF {
-	/** Reads a grammar with the specified file path.
-	 * @param path The path to the file.
-	 * @return an object representing the grammar in memory. */
+	/** Reads a grammar in PGF format.
+	 * @param path The path to the PGF file.
+	 * @return a PGF object representing the grammar in memory. */
 	public static native PGF readPGF(String path) throws FileNotFoundException;
 
 	/** Reads a grammar in PGF format and stores the unpacked data in a 
-	 * platform-dependent NGF file.
+	 * platform-dependent NGF file, ready to be shared with other process, 
+	 * or used for quick re-start.
 	 * @param pgfPath The path to the PGF file.
 	 * @param ngfPath The desired path for the new NGF file
-	 * @return an object representing the grammar in memory*/
+	 * @return a PGF object representing the grammar in memory. */
 	public static native PGF bootNGF(String pgfPath, String ngfPath) 
 	throws FileNotFoundException, FileAlreadyExistsException;
 

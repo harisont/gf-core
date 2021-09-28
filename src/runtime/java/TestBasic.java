@@ -1,6 +1,7 @@
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -63,7 +64,7 @@ public class TestBasic {
     String ngfPath = "new.ngf";
     try {
       PGF.bootNGF("../haskell/tests/basic.pgf", ngfPath);
-    } catch (FileNotFoundException e) {
+    } catch (IOException e) {
       thrown = true;
     }
     new File(ngfPath).delete();
@@ -83,7 +84,7 @@ public class TestBasic {
   }
 
   @Test
-  public void bootNGF_GF() throws FileNotFoundException {
+  public void bootNGF_GF() throws FileNotFoundException, FileAlreadyExistsException {
     boolean thrown = false;
     String ngfPath = "new.ngf";
     try {
@@ -95,7 +96,7 @@ public class TestBasic {
   }
 
   @Test
-  public void bootNGF_NGF() throws FileNotFoundException {
+  public void bootNGF_NGF() throws FileNotFoundException, FileAlreadyExistsException {
     boolean thrown = false;
     String ngfPath = "new.ngf";
     try {
