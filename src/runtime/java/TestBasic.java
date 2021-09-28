@@ -1,3 +1,4 @@
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
@@ -54,7 +55,70 @@ public class TestBasic {
     assertTrue(thrown);
   }
 
-  // TODO: bootNGF, readNGF, newNGF
+  // bootNGF
+
+  @Test
+  public void bootNGF_OK() {
+    boolean thrown = false;
+    String ngfPath = "new.ngf";
+    try {
+      PGF.bootNGF("../haskell/tests/basic.pgf", ngfPath);
+    } catch (FileNotFoundException e) {
+      thrown = true;
+    }
+    new File(ngfPath).delete();
+    assertFalse(thrown);
+  }
+
+  @Test
+  public void bootNGF_NotExisting() {
+    boolean thrown = false;
+    String ngfPath = "new.ngf";
+    try {
+      PGF.bootNGF("abc.pgf", ngfPath);
+    } catch (IOException e) {
+      thrown = true;
+    }
+  assertTrue(thrown);
+  }
+
+  @Test
+  public void bootNGF_GF() throws FileNotFoundException {
+    boolean thrown = false;
+    String ngfPath = "new.ngf";
+    try {
+      PGF.bootNGF("../haskell/tests/basic.gf", ngfPath);
+    } catch (PGFError e) {
+      thrown = true;
+    }
+  assertTrue(thrown);
+  }
+
+  @Test
+  public void bootNGF_NGF() throws FileNotFoundException {
+    boolean thrown = false;
+    String ngfPath = "new.ngf";
+    try {
+      PGF.bootNGF("basic.ngf", ngfPath);
+    } catch (PGFError e) {
+      thrown = true;
+    }
+  assertTrue(thrown);
+  }
+
+  @Test
+  public void bootNGF_ExistingNgfPath() {
+    boolean thrown = false;
+    String ngfPath = "basic.ngf";
+    try {
+      PGF.bootNGF("../haskell/tests/basic.gf", ngfPath);
+    } catch (IOException e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
+
+  // TODO: readNGF, newNGF
 
   // abstract syntax
   @Test

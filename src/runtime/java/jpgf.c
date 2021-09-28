@@ -12,6 +12,16 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
     return JNI_VERSION_1_6;
 }
 
+JNIEXPORT PgfExnType handleError(JNIEnv *env, PgfExn err)
+{
+    if (err.type == PGF_EXN_SYSTEM_ERROR) {
+        throw_string_exception(env, "java/io/IOException", err.msg);
+    } else if (err.type == PGF_EXN_PGF_ERROR) {
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
+    } 
+    return err.type;
+}
+
 JNIEXPORT jobject JNICALL 
 Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring s)
 { 	
@@ -28,15 +38,35 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 	// release C-style file path string
 	(*env)->ReleaseStringUTFChars(env, s, fpath);
 
-	if (err.type == PGF_EXN_NONE) { // no errors: return the PGF object
+	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
 		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
 		return (*env)->NewObject(env, cls, constrId, db, rev);
 	} else { // handle errors by throwing exceptions and return nothing
-		if (err.type == PGF_EXN_SYSTEM_ERROR) {
-		throw_jstring_exception(env, "java/io/IOException", s); 
-		} else if (err.type == PGF_EXN_PGF_ERROR) {
-		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
-		}
+		// call finalize method for cleanup; this also happens when err.type == PGF_EXN_OTHER_ERROR
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+}
+
+JNIEXPORT jstring JNICALL
+Java_org_grammaticalframework_pgf_PGF_bootNGF(JNIEnv* env, jclass cls, jstring p, jstring n)
+{
+	// initialization
+	long rev = 0;
+	PgfExn err;
+
+	// get C-style file path strings
+	const char *ppath = (*env)->GetStringUTFChars(env, p, 0);
+	const char *npath = (*env)->GetStringUTFChars(env, n, 0);
+
+	// read PGF from file, boot NGF and update the PGF object's db
+	PgfDB* db = pgf_boot_ngf(ppath, npath, &rev, &err);
+
+	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
+		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
+		return (*env)->NewObject(env, cls, constrId, db, rev);
+	} else { // handle errors by throwing exceptions and return nothing
 		// call finalize method for cleanup; this also happens when err.type == PGF_EXN_OTHER_ERROR
 		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
 		(*env)->CallVoidMethod(env, cls, finalizeId);

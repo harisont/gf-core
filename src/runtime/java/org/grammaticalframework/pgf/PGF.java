@@ -10,6 +10,14 @@ public class PGF {
 	 * @return an object representing the grammar in memory. */
 	public static native PGF readPGF(String path) throws FileNotFoundException;
 
+	/** Reads a grammar in PGF format and stores the unpacked data in a 
+	 * platform-dependent NGF file.
+	 * @param pgfPath The path to the PGF file.
+	 * @param ngfPath The desired path for the new NGF file
+	 * @return an object representing the grammar in memory*/
+	public static native PGF bootNGF(String pgfPath, String ngfPath) 
+	throws FileNotFoundException;
+
 	/** Reads a grammar from an input stream.
 	 * @param stream The stream from which to read the grammar
 	 * @return an object representing the grammar in memory. */
