@@ -118,7 +118,55 @@ public class TestBasic {
     assertTrue(thrown);
   }
 
-  // TODO: readNGF, newNGF
+  // readNGF
+
+  @Test
+  public void readNGF_OK() {
+    boolean thrown = false;
+    try {
+      PGF.readNGF("basic.ngf");
+    } catch (Exception e) {
+      thrown = true;
+    }
+  assertFalse(thrown);
+  }
+  
+  @Test
+  public void readNGF_NotExisting() {
+    boolean thrown = false;
+    try {
+      PGF.readNGF("abc.ngf");
+    } catch (IOException e) {
+      thrown = true;
+    }
+  assertTrue(thrown);
+  }
+
+  @Test
+  public void readNGF_GF() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      PGF.readNGF("../haskell/tests/basic.gf");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
+
+  @Test
+  public void readNGF_PGF() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      PGF.readNGF("../haskell/tests/basic.pgf");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
+
+  // TODO: something like Python's test_readNGF
+  
+  // TODO: newNGF
 
   // abstract syntax
   @Test

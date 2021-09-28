@@ -74,6 +74,33 @@ Java_org_grammaticalframework_pgf_PGF_bootNGF(JNIEnv* env, jclass cls, jstring p
 	}
 }
 
+JNIEXPORT jobject JNICALL 
+Java_org_grammaticalframework_pgf_PGF_readNGF(JNIEnv *env, jclass cls, jstring s)
+{ 	
+	// initialization
+	long rev = 0;
+	PgfExn err;
+
+	// get C-style file path string
+	const char *fpath = (*env)->GetStringUTFChars(env, s, 0);
+
+	// read PGF from file and update the PGF object's db
+	PgfDB* db = pgf_read_ngf(fpath, &rev, &err);
+
+	// release C-style file path string
+	(*env)->ReleaseStringUTFChars(env, s, fpath);
+
+	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
+		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
+		return (*env)->NewObject(env, cls, constrId, db, rev);
+	} else { // handle errors by throwing exceptions and return nothing
+		// call finalize method for cleanup; this also happens when err.type == PGF_EXN_OTHER_ERROR
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+}
+
 JNIEXPORT void JNICALL 
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
