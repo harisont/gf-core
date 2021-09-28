@@ -9,6 +9,18 @@ import static org.junit.Assert.*;
 import org.grammaticalframework.pgf.*;
 
 public class TestBasic {
+
+  private void createNgf() throws FileAlreadyExistsException, FileNotFoundException {
+      String ngfPath = "basic.ngf";
+
+        // if basic.ngf already exists, remove it, just in case
+        File ngfFile = new File(ngfPath);
+        if (ngfFile.exists())
+            ngfFile.delete();
+        
+        // create basic.ngf  
+        PGF.bootNGF("../haskell/tests/basic.pgf", ngfPath);
+  }
   
   // readPGF
 
@@ -46,7 +58,8 @@ public class TestBasic {
   }
 
   @Test
-  public void readPGF_NGF() throws FileNotFoundException {
+  public void readPGF_NGF() throws FileNotFoundException, FileAlreadyExistsException {
+    createNgf();
     boolean thrown = false;
     try {
       PGF.readPGF("basic.ngf");
@@ -97,6 +110,7 @@ public class TestBasic {
 
   @Test
   public void bootNGF_NGF() throws FileNotFoundException, FileAlreadyExistsException {
+    createNgf();
     boolean thrown = false;
     String ngfPath = "new.ngf";
     try {
@@ -122,7 +136,8 @@ public class TestBasic {
   // readNGF
 
   @Test
-  public void readNGF_OK() {
+  public void readNGF_OK() throws FileAlreadyExistsException, FileNotFoundException {
+    createNgf();
     boolean thrown = false;
     try {
       PGF.readNGF("basic.ngf");
