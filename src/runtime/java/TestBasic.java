@@ -10,7 +10,7 @@ import org.grammaticalframework.pgf.*;
 
 public class TestBasic {
 
-  private void createNgf() throws FileAlreadyExistsException, FileNotFoundException {
+  private void createBasicNGF() throws FileAlreadyExistsException, FileNotFoundException {
       String ngfPath = "basic.ngf";
 
         // if basic.ngf already exists, remove it, just in case
@@ -59,7 +59,7 @@ public class TestBasic {
 
   @Test
   public void readPGF_NGF() throws FileNotFoundException, FileAlreadyExistsException {
-    createNgf();
+    createBasicNGF();
     boolean thrown = false;
     try {
       PGF.readPGF("basic.ngf");
@@ -110,7 +110,7 @@ public class TestBasic {
 
   @Test
   public void bootNGF_NGF() throws FileNotFoundException, FileAlreadyExistsException {
-    createNgf();
+    createBasicNGF();
     boolean thrown = false;
     String ngfPath = "new.ngf";
     try {
@@ -137,7 +137,7 @@ public class TestBasic {
 
   @Test
   public void readNGF_OK() throws FileAlreadyExistsException, FileNotFoundException {
-    createNgf();
+    createBasicNGF();
     boolean thrown = false;
     try {
       PGF.readNGF("basic.ngf");
@@ -182,9 +182,34 @@ public class TestBasic {
 
   // TODO: something like Python's test_readNGF
   
-  // TODO: newNGF
+  //@Test
+  //public void newNGF_File() throws FileAlreadyExistsException {
+  //  String path = "empty.pgf";
+  //  PGF pgf = PGF.newNGF("empty", path);
+  //  assertEquals(0, pgf.getCategories().size());
+  //  new File(path).delete();
+  //}
+
+  //@Test
+  //public void newNGF_Memory() {
+  //  PGF pgf = PGF.newNGF("empty");
+  //  assertEquals(0, pgf.getCategories().size());
+  //}
+
+  @Test
+  public void newNGF_ExixtingFile() throws FileAlreadyExistsException, FileNotFoundException {
+    createBasicNGF();
+    boolean thrown = false;
+    try {
+      PGF.newNGF("basic","basic.ngf");
+    } catch (IOException e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
 
   // abstract syntax
+
   @Test
   public void getAbstractName_PGF() throws FileNotFoundException {
     PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");

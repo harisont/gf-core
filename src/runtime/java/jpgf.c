@@ -3,6 +3,8 @@
 #include <math.h>
 #include <jni.h>
 #include "jni_utils.h"
+#include <stdlib.h>
+#include <string.h>
 
 static JavaVM* cachedJVM;
 
@@ -89,6 +91,78 @@ Java_org_grammaticalframework_pgf_PGF_readNGF(JNIEnv *env, jclass cls, jstring s
 
 	// release C-style file path string
 	(*env)->ReleaseStringUTFChars(env, s, fpath);
+
+	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
+		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
+		return (*env)->NewObject(env, cls, constrId, db, rev);
+	} else { // handle errors by throwing exceptions and return nothing
+		// call finalize method for cleanup; this also happens when err.type == PGF_EXN_OTHER_ERROR
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+}
+
+JNIEXPORT jobject JNICALL 
+Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring n, jstring p)
+{
+	// initialization
+	long rev = 0;
+	PgfExn err;
+
+	// get C-style abstract name and file path strings
+	const char *aname = (*env)->GetStringUTFChars(env, n, 0);
+	const char *fpath = (*env)->GetStringUTFChars(env, p, 0);
+
+	// get name length
+	jsize s = strlen(aname);
+
+	// build PGFText out of abstract name string 
+	PgfText *anamePGF = (PgfText*)malloc(sizeof(PgfText));
+	memcpy(anamePGF->text, aname, s);
+	anamePGF->size = s;
+
+	// create new NGF
+	PgfDB* db = pgf_new_ngf(anamePGF, fpath, &rev, &err);
+
+	// release C-style file path string
+	(*env)->ReleaseStringUTFChars(env, n, aname);
+	(*env)->ReleaseStringUTFChars(env, p, fpath);
+
+	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
+		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
+		return (*env)->NewObject(env, cls, constrId, db, rev);
+	} else { // handle errors by throwing exceptions and return nothing
+		// call finalize method for cleanup; this also happens when err.type == PGF_EXN_OTHER_ERROR
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+}
+
+JNIEXPORT jobject JNICALL 
+Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring n)
+{
+	// initialization
+	long rev = 0;
+	PgfExn err;
+
+	// get C-style abstract name and file path strings
+	const char *aname = (*env)->GetStringUTFChars(env, n, 0);
+
+	// get name length
+	jsize s = strlen(aname);
+
+	// build PGFText out of abstract name string 
+	PgfText *anamePGF = (PgfText*)malloc(sizeof(PgfText));
+	memcpy(anamePGF->text, aname, s);
+	anamePGF->size = s;
+
+	// create new NGF
+	PgfDB* db = pgf_new_ngf(anamePGF, NULL, &rev, &err);
+
+	// release C-style file path string
+	(*env)->ReleaseStringUTFChars(env, n, aname);
 
 	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
 		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");

@@ -25,6 +25,24 @@ public class PGF {
 	 * @return a PGF object representing the grammar in memory.*/
 	public static native PGF readNGF(String path) throws FileNotFoundException;
 
+	/**
+	 * Creates an empty grammar with the given abstract name and stores it
+	 * on disk at the given path.
+	 * @param abstractName The name of the empty grammar to create.
+	 * @param path The path the grammar will be stored at.
+	 * @return
+	 */
+	public static native PGF newNGF(String abstractName, String path) 
+	throws FileAlreadyExistsException;
+
+	/**
+	 * Creates an empty grammar with the given abstract name, storing it only
+	 * in memory.
+	 * @param abstractName The name of the empty grammar to create.
+	 * @return
+	 */
+	public static native PGF newNGF(String abstractName);
+
 	/** Reads a grammar from an input stream.
 	 * @param stream The stream from which to read the grammar
 	 * @return an object representing the grammar in memory. */
