@@ -14,7 +14,7 @@
 #define p2l(x) ((jlong) (intptr_t) (x))
 
 JPGF_INTERNAL jstring
-pgf_text2j_string_(JNIEnv *env, PgfText txt) {
+p_text2j_string_(JNIEnv *env, PgfText txt) {
 	const char* utf8 = txt.text;
 	size_t len = txt.size;
 	//TODO: conversion to UTF16

@@ -18,7 +18,7 @@
 #define p2l(x) ((jlong) (intptr_t) (x))
 
 JPGF_INTERNAL jstring
-pgf_text2j_string(JNIEnv *env, PgfText txt);
+p_text2j_string(JNIEnv *env, PgfText txt);
 
 //JPGF_INTERNAL_DECL jstring
 //gu2j_string(JNIEnv *env, GuString s);

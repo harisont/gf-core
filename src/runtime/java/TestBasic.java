@@ -12,7 +12,7 @@ public class TestBasic {
   // readPGF
 
   @Test
-  public void readPGF_PGF() {
+  public void readPGF_OK() {
     boolean thrown = false;
     try {
       PGF.readPGF("../haskell/tests/basic.pgf");
@@ -23,7 +23,7 @@ public class TestBasic {
   }
   
   @Test
-  public void readPGF_NonExistant() {
+  public void readPGF_NotExisting() {
     boolean thrown = false;
     try {
       PGF.readPGF("abc.pgf");
