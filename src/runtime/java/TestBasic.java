@@ -2,6 +2,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
+import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -211,8 +213,15 @@ public class TestBasic {
   // abstract syntax
 
   @Test
-  public void getAbstractName_PGF() throws FileNotFoundException {
+  public void getAbstractName_OK() throws FileNotFoundException {
     PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
     assertEquals("basic", pgf.getAbstractName()); 
+  }
+
+  @Test
+  public void getCategories_OK() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] catsArray = {"Float","Int","N","P","S","String"};
+    assertEquals(Arrays.asList(catsArray), pgf.getCategories());
   }
 }

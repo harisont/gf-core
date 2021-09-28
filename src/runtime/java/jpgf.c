@@ -8,6 +8,26 @@
 
 static JavaVM* cachedJVM;
 
+typedef struct {
+	PgfItor fn;
+	JNIEnv *env;
+	jobject grammar;
+	jobject object;
+	jmethodID method_id;
+} JPGFClosure;
+
+static void
+pgf_collect_names(PgfItor* fn, PgfText* key, void* value, PgfExn* err)
+{
+	PgfText *name = key;
+    JPGFClosure* clo = (JPGFClosure*) fn;
+
+	//TODO: p_text2j_string(env, txt);
+	jstring jname = (*clo->env)->NewStringUTF(clo->env, name->text);
+
+	(*clo->env)->CallBooleanMethod(clo->env, clo->object, clo->method_id, jname);
+}
+
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
 {
     cachedJVM = jvm;
@@ -175,6 +195,57 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2(JNIEnv *env, j
 	}
 }
 
+JNIEXPORT jstring JNICALL 
+Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
+{
+	PgfExn err;
+
+	PgfText* txt = pgf_abstract_name(get_db(env, self),(long)get_rev(env, self),&err);
+
+	if (err.type != PGF_EXN_NONE) {
+		jclass cls = (*env)->GetObjectClass(env, self);
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+	//TODO: return p_text2j_string(env, txt);
+	return (*env)->NewStringUTF(env, txt->text);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_getCategories(JNIEnv* env, jobject self)
+{	
+	PgfExn err;
+
+	// copied from old runtime: create an empty list
+	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
+	if (!list_class)
+		return NULL;
+	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
+	if (!constrId)
+		return NULL;
+	jobject categories = (*env)->NewObject(env, list_class, constrId);
+	if (!categories)
+		return NULL;
+
+	// get id of the method to add to Java lists
+	jmethodID addId = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
+	if (!addId)
+		return NULL;
+
+	JPGFClosure clo = { { pgf_collect_names }, env, self, categories, addId };
+	pgf_iter_categories(get_db(env, self),(long)get_rev(env, self),&clo.fn,&err);
+
+	if (err.type != PGF_EXN_NONE) {
+		jclass cls = (*env)->GetObjectClass(env, self);
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+
+	return categories;
+}
+
 JNIEXPORT void JNICALL 
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
@@ -288,23 +359,6 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_io_InputStream_2(JNIEnv *en
 
 */
 
-JNIEXPORT jstring JNICALL 
-Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
-{
-	PgfExn err;
-
-	PgfText* txt = pgf_abstract_name(get_db(env, self),(long)get_rev(env, self),&err);
-
-	if (err.type != PGF_EXN_NONE) {
-		jclass cls = (*env)->GetObjectClass(env, self);
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
-		return NULL;
-	}
-	//TODO: return p_text2j_string(env, txt);
-	return (*env)->NewStringUTF(env, txt->text);
-}
-
 /*
 
 JNIEXPORT jstring JNICALL
@@ -347,14 +401,6 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionProb(JNIEnv* env, jobject self,
 
 	return prob;
 }
-
-typedef struct {
-	GuMapItor fn;
-	JNIEnv *env;
-	jobject grammar;
-	jobject object;
-	jmethodID method_id;
-} JPGFClosure;
 
 static void
 pgf_collect_langs(GuMapItor* fn, const void* key, void* value, GuExn* err)
@@ -405,52 +451,6 @@ Java_org_grammaticalframework_pgf_PGF_getLanguages(JNIEnv* env, jobject self)
 	gu_pool_free(tmp_pool);
 
 	return languages;
-}
-
-static void
-pgf_collect_names(GuMapItor* fn, const void* key, void* value, GuExn* err)
-{
-	PgfCId name = (PgfCId) key;
-    JPGFClosure* clo = (JPGFClosure*) fn;
-
-	jstring jname = gu2j_string(clo->env, name);
-
-	(*clo->env)->CallBooleanMethod(clo->env, clo->object, clo->method_id, jname);
-}
-
-JNIEXPORT jobject JNICALL
-Java_org_grammaticalframework_pgf_PGF_getCategories(JNIEnv* env, jobject self)
-{
-	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
-	if (!list_class)
-		return NULL;
-	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
-	if (!constrId)
-		return NULL;
-	jobject categories = (*env)->NewObject(env, list_class, constrId);
-	if (!categories)
-		return NULL;
-	jmethodID add_method = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
-	if (!add_method)
-		return NULL;
-
-	PGF* pgf = get_ref(env, self);
-
-	GuPool* tmp_pool = gu_local_pool();
-
-	// Create an exception frame that catches all errors.
-	GuExn* err = gu_exn(tmp_pool);
-	
-	JPGFClosure clo = { { pgf_collect_names }, env, self, categories, add_method };
-	pgf_iter_categories(pgf, &clo.fn, err);
-	if (!gu_ok(err)) {
-		gu_pool_free(tmp_pool);
-		return NULL;
-	}
-
-	gu_pool_free(tmp_pool);
-
-	return categories;
 }
 
 JNIEXPORT jobject JNICALL
