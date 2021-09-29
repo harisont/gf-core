@@ -184,19 +184,19 @@ public class TestBasic {
 
   // TODO: something like Python's test_readNGF
   
-  //@Test
-  //public void newNGF_File() throws FileAlreadyExistsException {
-  //  String path = "empty.pgf";
-  //  PGF pgf = PGF.newNGF("empty", path);
-  //  assertEquals(0, pgf.getCategories().size());
-  //  new File(path).delete();
-  //}
+  @Test
+  public void newNGF_File() throws FileAlreadyExistsException {
+    String path = "empty.ngf";
+    PGF pgf = PGF.newNGF("empty", path);
+    assertEquals(0, pgf.getCategories().size());
+    new File(path).delete();
+  }
 
-  //@Test
-  //public void newNGF_Memory() {
-  //  PGF pgf = PGF.newNGF("empty");
-  //  assertEquals(0, pgf.getCategories().size());
-  //}
+  @Test
+  public void newNGF_Memory() {
+    PGF pgf = PGF.newNGF("empty");
+    assertEquals(0, pgf.getCategories().size());
+  }
 
   @Test
   public void newNGF_ExixtingFile() throws FileAlreadyExistsException, FileNotFoundException {
