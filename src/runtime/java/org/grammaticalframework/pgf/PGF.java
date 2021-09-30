@@ -11,6 +11,11 @@ public class PGF {
 	 * @return a PGF object representing the grammar in memory. */
 	public static native PGF readPGF(String path) throws FileNotFoundException;
 
+	/** Reads a grammar from an input stream.
+	 * @param stream The stream from which to read the grammar
+	 * @return an object representing the grammar in memory. */
+	// TODO: (?) public static native PGF readPGF(InputStream stream);
+
 	/** Reads a grammar in PGF format and stores the unpacked data in a 
 	 * platform-dependent NGF file, ready to be shared with other process, 
 	 * or used for quick re-start.
@@ -43,32 +48,37 @@ public class PGF {
 	 */
 	public static native PGF newNGF(String abstractName);
 
-	/** Reads a grammar from an input stream.
-	 * @param stream The stream from which to read the grammar
-	 * @return an object representing the grammar in memory. */
-	public static native PGF readPGF(InputStream stream);
+	// TODO: writePGF
+
+	// ABSTRACT SYNTAX
 
 	/** Returns the name of the abstract syntax for the grammar */
 	public native String getAbstractName();
 
-	/** Returns a map from a name of a concrete syntax to 
-	 * a {@link Concr} object for the syntax. */
-	public native Map<String,Concr> getLanguages();
-
 	/** Returns a list of with all categories in the grammar */
 	public native List<String> getCategories();
-	
+	// TODO: categoryContext
+
 	/** The name of the start category for the grammar. This is usually
 	 * specified with 'params startcat=&lt;cat&gt;'.
 	 */
-	public native String getStartCat();
-	
+	// TODO: public native String getStartCat();
+
 	/** Returns a list with all functions in the grammar. */
-	public native List<String> getFunctions();
-	
+	// TODO: public native List<String> getFunctions();
+
 	/** Returns a list with all functions with a given return category.
 	 * @param cat The name of the return category. */
-	public native List<String> getFunctionsByCat(String cat);
+	// TODO: public native List<String> getFunctionsByCat(String cat);
+
+	// TODO: functionIsConstructor
+
+	// TYPES
+
+	/** Returns a map from a name of a concrete syntax to 
+	 * a {@link Concr} object for the syntax. */
+	public native Map<String,Concr> getLanguages();
+	
 	
 	/** Returns the type of the function with the given name.
 	 * @param fun The name of the function.
