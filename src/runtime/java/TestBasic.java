@@ -224,4 +224,11 @@ public class TestBasic {
     String[] catsArray = {"Float","Int","N","P","S","String"};
     assertEquals(Arrays.asList(catsArray), pgf.getCategories());
   }
+
+  @Test
+  public void getFunctions_OK() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {"c","ind","s","z"};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctions());
+  }
 }

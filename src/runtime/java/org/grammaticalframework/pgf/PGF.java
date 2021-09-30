@@ -64,8 +64,8 @@ public class PGF {
 	 */
 	// TODO: public native String getStartCat();
 
-	/** Returns a list with all functions in the grammar. */
-	// TODO: public native List<String> getFunctions();
+	/** Returns a list with the names of all functions in the grammar. */
+	public native List<String> getFunctions();
 
 	/** Returns a list with all functions with a given return category.
 	 * @param cat The name of the return category. */
