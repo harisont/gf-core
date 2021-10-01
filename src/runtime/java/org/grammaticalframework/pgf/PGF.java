@@ -69,7 +69,7 @@ public class PGF {
 
 	/** Returns a list with all functions with a given return category.
 	 * @param cat The name of the return category. */
-	// TODO: public native List<String> getFunctionsByCat(String cat);
+	public native List<String> getFunctionsByCat(String cat);
 
 	// TODO: functionIsConstructor
 

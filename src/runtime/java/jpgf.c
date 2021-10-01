@@ -280,6 +280,54 @@ Java_org_grammaticalframework_pgf_PGF_getFunctions(JNIEnv* env, jobject self)
 	return functions;
 }
 
+JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject self, jstring c)
+{
+	PgfExn err;
+
+	// copied from old runtime: create an empty list
+	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
+	if (!list_class)
+		return NULL;
+	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
+	if (!constrId)
+		return NULL;
+	jobject functions = (*env)->NewObject(env, list_class, constrId);
+	if (!functions)
+		return NULL;
+
+	// get id of the method to add to Java lists
+	jmethodID addId = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
+	if (!addId)
+		return NULL;
+
+	// get C-style abstract name and file path strings
+	const char *cname = (*env)->GetStringUTFChars(env, c, 0);
+
+	// get name length
+	jsize s = strlen(cname);
+
+	// build PGFText out of category name string 
+	PgfText *cnamePGF = (PgfText*)malloc(sizeof(PgfText));
+	memcpy(cnamePGF->text, cname, s);
+	cnamePGF->size = s;
+
+	// release C-style file path string
+	(*env)->ReleaseStringUTFChars(env, c, cname);
+
+	JPGFClosure clo = { { pgf_collect_names }, env, self, functions, addId };
+	pgf_iter_functions_by_cat(get_db(env, self),(long)get_rev(env, self),cnamePGF,&clo.fn,&err);
+
+	if (err.type != PGF_EXN_NONE) {
+		jclass cls = (*env)->GetObjectClass(env, self);
+		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, finalizeId);
+		return NULL;
+	}
+
+	return functions;
+}
+
 JNIEXPORT void JNICALL 
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
@@ -485,43 +533,6 @@ Java_org_grammaticalframework_pgf_PGF_getLanguages(JNIEnv* env, jobject self)
 	gu_pool_free(tmp_pool);
 
 	return languages;
-}
-
-JNIEXPORT jobject JNICALL
-Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject self, jstring jcat)
-{
-	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
-	if (!list_class)
-		return NULL;
-	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
-	if (!constrId)
-		return NULL;
-	jobject functions = (*env)->NewObject(env, list_class, constrId);
-	if (!functions)
-		return NULL;
-	jmethodID add_method = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
-	if (!add_method)
-		return NULL;
-
-	PGF* pgf = get_ref(env, self);
-
-	GuPool* tmp_pool = gu_local_pool();
-
-	PgfCId cat = j2gu_string(env, jcat, tmp_pool);
-
-	// Create an exception frame that catches all errors.
-	GuExn* err = gu_exn(tmp_pool);
-	
-	JPGFClosure clo = { { pgf_collect_names }, env, self, functions, add_method };
-	pgf_iter_functions_by_cat(pgf, cat, &clo.fn, err);
-	if (!gu_ok(err)) {
-		gu_pool_free(tmp_pool);
-		return NULL;
-	}
-
-	gu_pool_free(tmp_pool);
-
-	return functions;
 }
 
 JNIEXPORT jstring JNICALL
