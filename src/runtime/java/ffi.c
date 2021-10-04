@@ -1,11 +1,37 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <alloca.h>
 
 #include <jni.h>
 #include "jni_utils.h"
 #include <pgf/pgf.h>
 #include "./ffi.h"
+
+//PGF_API uint32_t
+//pgf_utf8_decode(const uint8_t** src_inout)
+//{
+//	const uint8_t* src = *src_inout;
+//	uint8_t c = src[0];
+//	if (c < 0x80) {
+//		*src_inout = src + 1;
+//		return c;
+//	}
+//	size_t len = (c < 0xe0 ? 1 :
+//	              c < 0xf0 ? 2 :
+//	              c < 0xf8 ? 3 :
+//	              c < 0xfc ? 4 :
+//	                         5
+//	             );
+//	uint64_t mask = 0x0103070F1f7f;
+//	uint32_t u = c & (mask >> (len * 8));
+//	for (size_t i = 1; i <= len; i++) {
+//		c = src[i];
+//		u = u << 6 | (c & 0x3f);
+//	}
+//	*src_inout = &src[len + 1];
+//	return u;
+//}
 
 
 // error handling
@@ -24,8 +50,21 @@ JNIEXPORT PgfExnType handleError(JNIEnv *env, PgfExn err)
 
 JPGF_INTERNAL jstring p2j_string(JNIEnv *env, PgfText *s) {
     const char* utf8 = s->text;
-    // size_t len = s->size ;
+    //size_t len = s->size ;
 
-	// TODO: convert to UTF-16 and use NewString(env, utf16, size) instead
-    return (*env)->NewStringUTF(env, utf8);
+	//jchar* utf16 = alloca(len*sizeof(jchar));
+	//jchar* dst   = utf16;
+	//while (s->text-utf8 < len) {
+	//	uint32_t ucs = pgf_utf8_decode((const uint8_t**) &s);
+
+	//	if (ucs <= 0xFFFF) {
+	//		*dst++ = ucs;
+	//	} else {
+	//		ucs -= 0x10000;
+	//		*dst++ = 0xD800+((ucs >> 10) & 0x3FF);
+	//		*dst++ = 0xDC00+(ucs & 0x3FF);
+	//	}
+	//}
+	//return (*env)->NewString(env, utf16, dst-utf16);
+	return (*env)->NewStringUTF(env, utf8);
 }
