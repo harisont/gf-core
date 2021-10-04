@@ -8,7 +8,7 @@ JNIEXPORT PgfExnType handleError(JNIEnv *env, PgfExn err);
 
 // string conversions
 JPGF_INTERNAL_DECL jstring 
-p2j_string(JNIEnv *env, PgfText* s);
+pgf_text2jstring(JNIEnv *env, PgfText* s);
 
 JPGF_INTERNAL_DECL PgfText* 
 j2p_string(JNIEnv *env, jstring s);

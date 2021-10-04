@@ -23,7 +23,7 @@ pgf_collect_names(PgfItor* fn, PgfText* key, void* value, PgfExn* err)
 	PgfText *name = key;
     JPGFClosure* clo = (JPGFClosure*) fn;
 
-	jstring jname = p2j_string(clo->env, name);
+	jstring jname = pgf_text2jstring(clo->env, name);
 
 	(*clo->env)->CallBooleanMethod(clo->env, clo->object, clo->method_id, jname);
 }
@@ -198,7 +198,7 @@ Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 		(*env)->CallVoidMethod(env, cls, finalizeId);
 		return NULL;
 	}
-	return p2j_string(env, txt);
+	return pgf_text2jstring(env, txt);
 }
 
 JNIEXPORT jobject JNICALL
