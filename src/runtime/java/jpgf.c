@@ -5,6 +5,7 @@
 #include "jni_utils.h"
 #include <stdlib.h>
 #include <string.h>
+#include "./ffi.h"
 
 static JavaVM* cachedJVM;
 
@@ -32,16 +33,6 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
 {
     cachedJVM = jvm;
     return JNI_VERSION_1_6;
-}
-
-JNIEXPORT PgfExnType handleError(JNIEnv *env, PgfExn err)
-{
-    if (err.type == PGF_EXN_SYSTEM_ERROR) {
-        throw_string_exception(env, "java/io/IOException", err.msg);
-    } else if (err.type == PGF_EXN_PGF_ERROR) {
-        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", err.msg);
-    } 
-    return err.type;
 }
 
 JNIEXPORT jobject JNICALL 

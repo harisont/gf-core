@@ -17,8 +17,8 @@
 #define l2p(x) ((void*) (intptr_t) (x))
 #define p2l(x) ((jlong) (intptr_t) (x))
 
-JPGF_INTERNAL jstring
-p_text2j_string(JNIEnv *env, PgfText txt);
+//JPGF_INTERNAL jstring
+//p_text2j_string(JNIEnv *env, PgfText txt);
 
 //JPGF_INTERNAL_DECL jstring
 //gu2j_string(JNIEnv *env, GuString s);
