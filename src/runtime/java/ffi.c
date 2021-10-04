@@ -1,3 +1,4 @@
+#include <string.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -48,7 +49,9 @@ JNIEXPORT PgfExnType handleError(JNIEnv *env, PgfExn err)
 
 // string conversions
 
-JPGF_INTERNAL jstring pgf_text2jstring(JNIEnv *env, PgfText *s) {
+JPGF_INTERNAL jstring 
+pgf_text2jstring(JNIEnv *env, PgfText *s) 
+{
 	const char* utf8s = s->text;
     const char* utf8 = s->text;
     size_t len = s->size ;
@@ -68,4 +71,17 @@ JPGF_INTERNAL jstring pgf_text2jstring(JNIEnv *env, PgfText *s) {
 	}
 
 	return (*env)->NewString(env, utf16, dst-utf16);
+}
+
+
+JPGF_INTERNAL PgfText* 
+jstring2pgf_text(JNIEnv *env, jstring s)
+{
+	const char* text = (*env)->GetStringUTFChars(env, s, 0);
+	jsize size = (*env)->GetStringLength(env, s);
+	PgfText *pgfText = (PgfText*)malloc(sizeof(PgfText));
+	memcpy(pgfText->text, text, size);
+	pgfText->size = (size_t)s;
+	(*env)->ReleaseStringUTFChars(env, s, text);
+	return pgfText;
 }
