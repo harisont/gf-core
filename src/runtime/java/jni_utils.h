@@ -17,30 +17,6 @@
 #define l2p(x) ((void*) (intptr_t) (x))
 #define p2l(x) ((jlong) (intptr_t) (x))
 
-//JPGF_INTERNAL jstring
-//p_text2j_string(JNIEnv *env, PgfText txt);
-
-//JPGF_INTERNAL_DECL jstring
-//gu2j_string(JNIEnv *env, GuString s);
-
-JPGF_INTERNAL_DECL jstring
-gu2j_string_len(JNIEnv *env, const char* s, size_t len);
-
-//JPGF_INTERNAL_DECL jstring
-//gu2j_string_buf(JNIEnv *env, GuStringBuf* sbuf);
-
-//JPGF_INTERNAL jstring
-//gu2j_string_capit(JNIEnv *env, GuString s, PgfCapitState capit);
-
-//JPGF_INTERNAL_DECL GuString
-//j2gu_string(JNIEnv *env, jstring s, GuPool* pool);
-
-//JPGF_INTERNAL_DECL size_t
-//gu2j_string_offset(GuString s, size_t offset);
-
-//JPGF_INTERNAL_DECL size_t
-//j2gu_string_offset(GuString s, size_t joffset);
-
 JPGF_INTERNAL_DECL void*
 get_db(JNIEnv *env, jobject self);
 
