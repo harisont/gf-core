@@ -20,11 +20,13 @@ public class Type {
 	//////////////////////////////////////////////////////////////////
 	// private stuff
 
-	private Object master;
-	private long ref;
+	private Hypo[] hypos;
+	private String cat;
+	private Expr[] exprs;
 
-	private Type(Object master, long ref) {
-		this.master = master;
-		this.ref    = ref;
+	private Type(Hypo[] hypos, String cat, Expr[] exprs) {
+		this.hypos = hypos;
+		this.cat = cat;
+		this.exprs = exprs;
 	}
 }

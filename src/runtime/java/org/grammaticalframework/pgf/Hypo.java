@@ -4,7 +4,7 @@ public class Hypo {
 	public native boolean getBindType();
 	
 	/** The name of the bound variable or '_' if there is none */
-	public native String getVariable();
+	public native String getVar();
 	
 	/** The type for this hypothesis */
 	public native Type getType();
@@ -12,11 +12,13 @@ public class Hypo {
 	//////////////////////////////////////////////////////////////////
 	// private stuff
 
-	private Object master;
-	private long ref;
+	private boolean bindType;
+	private String var;
+	private Type type;
 
-	private Hypo(Object master, long ref) {
-		this.master = master;
-		this.ref    = ref;
+	private Hypo(boolean bindType, String var, Type type) {
+		this.bindType = bindType;
+		this.var = var;
+		this.type = type;
 	}
 }
