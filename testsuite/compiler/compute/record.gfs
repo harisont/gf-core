@@ -1,0 +1,5 @@
+i -retain testsuite/compiler/compute/record.gf
+cc hello
+cc {x="x"; y="y"}.x
+cc {x="x"; y="y"}.y
+cc <\r -> r.x : {x:Str; y:Str} -> Str>

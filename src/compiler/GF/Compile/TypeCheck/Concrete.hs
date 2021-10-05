@@ -13,6 +13,7 @@ import GF.Grammar.Lockfield (isLockLabel, lockRecType, unlockRecord)
 import GF.Compile.TypeCheck.Primitives
 
 import Data.List
+import Data.Maybe(fromMaybe)
 import Control.Monad
 import GF.Text.Pretty
 
@@ -264,9 +265,10 @@ inferLType gr g trm = case trm of
    EPattType ty -> do
      ty' <- justCheck g ty typeType
      return (EPattType ty',typeType)
-   EPatt p -> do
+   EPatt _ _ p -> do
      ty <- inferPatt p
-     return (trm, EPattType ty)
+     let (minp,maxp,p') = measurePatt gr p
+     return (EPatt minp maxp p', EPattType ty)
 
    ELin c trm -> do
      (trm',ty) <- inferLType gr g trm
@@ -290,7 +292,7 @@ inferLType gr g trm = case trm of
    inferCase mty (patt,term) = do
      arg  <- maybe (inferPatt patt) return mty
      cont <- pattContext gr g arg patt
-     (_,val) <- inferLType gr (reverse cont ++ g) term
+     (term',val) <- inferLType gr (reverse cont ++ g) term
      return (arg,val)
    isConstPatt p = case p of
      PC _ ps -> True --- all isConstPatt ps
@@ -302,9 +304,9 @@ inferLType gr g trm = case trm of
      PFloat _ -> True
      PChar -> True
      PChars _ -> True
-     PSeq p q -> isConstPatt p && isConstPatt q
+     PSeq _ _ p _ _ q -> isConstPatt p && isConstPatt q
      PAlt p q -> isConstPatt p && isConstPatt q
-     PRep p -> isConstPatt p
+     PRep _ _ p -> isConstPatt p
      PNeg p -> isConstPatt p
      PAs _ p -> isConstPatt p
      _ -> False
@@ -314,11 +316,43 @@ inferLType gr g trm = case trm of
      PAs _ p  -> inferPatt p
      PNeg p   -> inferPatt p
      PAlt p q -> checks [inferPatt p, inferPatt q]
-     PSeq _ _ -> return $ typeStr
-     PRep _   -> return $ typeStr
+     PSeq _ _ _ _ _ _ -> return $ typeStr
+     PRep _ _ _ -> return $ typeStr
      PChar    -> return $ typeStr
      PChars _ -> return $ typeStr
      _ -> inferLType gr g (patt2term p) >>= return . snd
+
+measurePatt gr p =
+  case p of
+    PM q       -> case lookupResDef gr q of
+                    Ok t    -> case t of
+                                 EPatt minp maxp _ -> (minp,maxp,p)
+                                 _ -> error "Expected pattern macro"
+                    Bad msg -> error msg
+    PR ass     -> let p' = PR (map (\(lbl,p) -> let (_,_,p') = measurePatt gr p in (lbl,p')) ass)
+                  in (0,Nothing,p')
+    PString s  -> let len=length s
+                  in (len,Just len,p)
+    PT t p     -> let (min,max,p') = measurePatt gr p
+                  in (min,max,PT t p')
+    PAs x p    -> let (min,max,p') = measurePatt gr p
+                  in (min,max,PAs x p')
+    PImplArg p -> let (min,max,p') = measurePatt gr p
+                  in (min,max,PImplArg p')
+    PNeg p     -> let (_,_,p') = measurePatt gr p
+                  in (0,Nothing,PNeg p')
+    PAlt p1 p2 -> let (min1,max1,p1') = measurePatt gr p1
+                      (min2,max2,p2') = measurePatt gr p2
+                  in (min min1 min2,liftM2 max max1 max2,PAlt p1' p2')
+    PSeq _ _ p1 _ _ p2
+               -> let (min1,max1,p1') = measurePatt gr p1
+                      (min2,max2,p2') = measurePatt gr p2
+                  in (min1+min2,liftM2 (+) max1 max2,PSeq min1 max1 p1' min2 max2 p2')
+    PRep _ _ p -> let (minp,maxp,p') = measurePatt gr p
+                  in (0,Nothing,PRep minp maxp p')
+    PChar      -> (1,Just 1,p)
+    PChars _   -> (1,Just 1,p)
+    _          -> (0,Nothing,p)
 
 -- type inference: Nothing, type checking: Just t
 -- the latter permits matching with value type
@@ -596,7 +630,8 @@ checkLType gr g trm typ0 = do
    checkCase arg val (p,t) = do
      cont <- pattContext gr g arg p
      t' <- justCheck (reverse cont ++ g) t val
-     return (p,t')
+     let (_,_,p') = measurePatt gr p
+     return (p',t')
 
 pattContext :: SourceGrammar -> Context -> Type -> Patt -> Check Context
 pattContext env g typ p = case p of
@@ -633,11 +668,11 @@ pattContext env g typ p = case p of
        fsep pts <+>
        "in pattern alterantives" <+> ppPatt Unqualified 0 p) (null pts)
     return g1 -- must be g1 == g2
-  PSeq p q -> do
+  PSeq _ _ p _ _ q -> do
     g1 <- pattContext env g typ p
     g2 <- pattContext env g typ q
     return $ g1 ++ g2
-  PRep p' -> noBind typeStr p'
+  PRep _ _ p' -> noBind typeStr p'
   PNeg p' -> noBind typ p'
 
   _ -> return [] ---- check types!

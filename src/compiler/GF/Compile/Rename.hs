@@ -237,9 +237,9 @@ renameTerm env vars = ren vars where
                             , checkError ("unknown qualified constant" <+> trm)
                             ]
 
-    EPatt p -> do
+    EPatt minp maxp p -> do
       (p',_) <- renpatt p
-      return $ EPatt p'
+      return $ EPatt minp maxp p'
 
     _ -> composOp (ren vs) trm
 
@@ -306,14 +306,14 @@ renamePattern env patt =
         (q',ws) <- renp q
         return (PAlt p' q', vs ++ ws)
 
-      PSeq p q -> do
+      PSeq minp maxp p minq maxq q -> do
         (p',vs) <- renp p
         (q',ws) <- renp q
-        return (PSeq p' q', vs ++ ws)
+        return (PSeq minp maxp p' minq maxq q', vs ++ ws)
 
-      PRep p -> do
+      PRep minp maxp p -> do
         (p',vs) <- renp p
-        return (PRep p', vs)
+        return (PRep minp maxp p', vs)
 
       PNeg p -> do
         (p',vs) <- renp p

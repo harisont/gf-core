@@ -10,6 +10,8 @@ pgfinclude_HEADERS = \
 libpgf_la_SOURCES = \
 	pgf/db.cxx \
 	pgf/db.h \
+	pgf/ipc.cxx \
+	pgf/ipc.h \
 	pgf/text.cxx \
 	pgf/text.h \
 	pgf/pgf.cxx \
@@ -25,7 +27,8 @@ libpgf_la_SOURCES = \
 	pgf/expr.h \
 	pgf/namespace.h
 
-libpgf_la_LDFLAGS = "-no-undefined"
+libpgf_la_LDFLAGS = -no-undefined
+libpgf_la_LIBADD = -lrt
 libpgf_la_CXXFLAGS = -fno-rtti
 
 bin_PROGRAMS =
