@@ -213,7 +213,7 @@ ppTerm q d (FV es)     = prec d 4 ("variants" <+> braces (fsep (punctuate ';' (m
 ppTerm q d (AdHocOverload es)     = "overload" <+> braces (fsep (punctuate ';' (map (ppTerm q 0) es)))
 ppTerm q d (Alts e xs) = prec d 4 ("pre" <+> braces (ppTerm q 0 e <> ';' <+> fsep (punctuate ';' (map (ppAltern q) xs))))
 ppTerm q d (Strs es)   = "strs" <+> braces (fsep (punctuate ';' (map (ppTerm q 0) es)))
-ppTerm q d (EPatt p)   = prec d 4 ('#' <+> ppPatt q 2 p)
+ppTerm q d (EPatt _ _ p)=prec d 4 ('#' <+> ppPatt q 2 p)
 ppTerm q d (EPattType t)=prec d 4 ("pattern" <+> ppTerm q 0 t)
 ppTerm q d (P t l)     = prec d 5 (ppTerm q 5 t <> '.' <> l)
 ppTerm q d (Cn id)     = pp id
@@ -250,15 +250,14 @@ ppCase q (p,e) = ppPatt q 0 p <+> "=>" <+> ppTerm q 0 e
 instance Pretty Patt where pp = ppPatt Unqualified 0
 
 ppPatt q d (PAlt p1 p2) = prec d 0 (ppPatt q 0 p1 <+> '|' <+> ppPatt q 1 p2)
-ppPatt q d (PSeq p1 p2) = prec d 0 (ppPatt q 0 p1 <+> '+' <+> ppPatt q 1 p2)
-ppPatt q d (PMSeq (_,p1) (_,p2)) = prec d 0 (ppPatt q 0 p1 <+> '+' <+> ppPatt q 1 p2)
+ppPatt q d (PSeq _ _ p1 _ _ p2) = prec d 0 (ppPatt q 0 p1 <+> '+' <+> ppPatt q 1 p2)
 ppPatt q d (PC f ps)    = if null ps
                             then pp f
                             else prec d 1 (f <+> hsep (map (ppPatt q 3) ps))
 ppPatt q d (PP f ps)    = if null ps
                             then ppQIdent q f
                             else prec d 1 (ppQIdent q f <+> hsep (map (ppPatt q 3) ps))
-ppPatt q d (PRep p)     = prec d 1 (ppPatt q 3 p <> '*')
+ppPatt q d (PRep _ _ p) = prec d 1 (ppPatt q 3 p <> '*')
 ppPatt q d (PAs f p)    = prec d 2 (f <> '@' <> ppPatt q 3 p)
 ppPatt q d (PNeg p)     = prec d 2 ('-' <> ppPatt q 3 p)
 ppPatt q d (PChar)      = pp '?'

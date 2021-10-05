@@ -182,7 +182,7 @@ instance Binary Term where
   put (QC x)        = putWord8 25 >> put x
   put (C x y)       = putWord8 26 >> put (x,y)
   put (Glue x y)    = putWord8 27 >> put (x,y)
-  put (EPatt x)     = putWord8 28 >> put x
+  put (EPatt x y z) = putWord8 28 >> put (x,y,z)
   put (EPattType x) = putWord8 29 >> put x
   put (ELincat x y) = putWord8 30 >> put (x,y)
   put (ELin x y)    = putWord8 31 >> put (x,y)
@@ -221,7 +221,7 @@ instance Binary Term where
              25 -> get >>= \x       -> return (QC x)
              26 -> get >>= \(x,y)   -> return (C x y)
              27 -> get >>= \(x,y)   -> return (Glue x y)
-             28 -> get >>= \x       -> return (EPatt x)
+             28 -> get >>= \(x,y,z) -> return (EPatt x y z)
              29 -> get >>= \x       -> return (EPattType x)
              30 -> get >>= \(x,y)   -> return (ELincat x y)
              31 -> get >>= \(x,y)   -> return (ELin x y)
@@ -244,8 +244,8 @@ instance Binary Patt where
   put (PAs  x y)   = putWord8 10 >> put (x,y)
   put (PNeg x)     = putWord8 11 >> put x
   put (PAlt x y)   = putWord8 12 >> put (x,y)
-  put (PSeq x y)   = putWord8 13 >> put (x,y)
-  put (PRep x)     = putWord8 14 >> put x
+  put (PSeq minx maxx x miny maxy y)   = putWord8 13 >> put (minx,maxx,x,miny,maxy,y)
+  put (PRep minx maxx x)= putWord8 14 >> put (minx,maxx,x)
   put (PChar)      = putWord8 15
   put (PChars x)   = putWord8 16 >> put x
   put (PMacro x)   = putWord8 17 >> put x
@@ -266,8 +266,8 @@ instance Binary Patt where
              10 -> get >>= \(x,y)   -> return (PAs  x y)
              11 -> get >>= \x       -> return (PNeg x)
              12 -> get >>= \(x,y)   -> return (PAlt x y)
-             13 -> get >>= \(x,y)   -> return (PSeq x y)
-             14 -> get >>= \x       -> return (PRep x)
+             13 -> get >>= \(minx,maxx,x,miny,maxy,y) -> return (PSeq minx maxx x miny maxy y)
+             14 -> get >>= \(minx,maxx,x)-> return (PRep minx maxx x)
              15 ->                     return (PChar)
              16 -> get >>= \x       -> return (PChars x)
              17 -> get >>= \x       -> return (PMacro x)

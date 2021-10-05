@@ -384,7 +384,7 @@ term2patt trm = case termForm trm of
     return (PNeg a')
   Ok ([], Cn id, [a]) | id == cRep -> do
     a' <- term2patt a
-    return (PRep a')
+    return (PRep 0 Nothing a')
   Ok ([], Cn id, []) | id == cRep -> do
     return PChar
   Ok ([], Cn id,[K s]) | id == cChars  -> do
@@ -392,7 +392,7 @@ term2patt trm = case termForm trm of
   Ok ([], Cn id, [a,b]) | id == cSeq -> do
     a' <- term2patt a
     b' <- term2patt b
-    return (PSeq a' b')
+    return (PSeq 0 Nothing a' 0 Nothing b')
   Ok ([], Cn id, [a,b]) | id == cAlt -> do
     a' <- term2patt a
     b' <- term2patt b
@@ -422,9 +422,9 @@ patt2term pt = case pt of
   PAs x p   -> appCons cAs    [Vr x, patt2term p]            --- an encoding
   PChar     -> appCons cChar  []                             --- an encoding
   PChars s  -> appCons cChars [K s]                          --- an encoding
-  PSeq a b  -> appCons cSeq   [(patt2term a), (patt2term b)] --- an encoding
+  PSeq _ _ a _ _ b  -> appCons cSeq   [(patt2term a), (patt2term b)] --- an encoding
   PAlt a b  -> appCons cAlt   [(patt2term a), (patt2term b)] --- an encoding
-  PRep a    -> appCons cRep   [(patt2term a)]                --- an encoding
+  PRep _ _ a-> appCons cRep   [(patt2term a)]                --- an encoding
   PNeg a    -> appCons cNeg   [(patt2term a)]                --- an encoding
 
 
@@ -475,9 +475,8 @@ composPattOp op patt =
     PImplArg p      -> liftM  PImplArg (op p)
     PNeg p          -> liftM  PNeg (op p)
     PAlt p1 p2      -> liftM2 PAlt (op p1) (op p2)
-    PSeq p1 p2      -> liftM2 PSeq (op p1) (op p2)
-    PMSeq (_,p1) (_,p2) -> liftM2 PSeq (op p1) (op p2) -- information loss
-    PRep p          -> liftM  PRep (op p)
+    PSeq _ _ p1 _ _ p2  -> liftM2 (\p1 p2 -> PSeq 0 Nothing p1 0 Nothing p2) (op p1) (op p2)
+    PRep _ _ p      -> liftM  (PRep 0 Nothing) (op p)
     _               -> return patt -- covers cases without subpatterns
 
 collectOp :: Monoid m => (Term -> m) -> Term -> m
@@ -514,9 +513,8 @@ collectPattOp op patt =
     PImplArg p      -> op p
     PNeg p          -> op p
     PAlt p1 p2      -> op p1++op p2
-    PSeq p1 p2      -> op p1++op p2
-    PMSeq (_,p1) (_,p2) -> op p1++op p2
-    PRep p          -> op p
+    PSeq _ _ p1 _ _ p2 -> op p1++op p2
+    PRep _ _ p      -> op p
     _               -> []     -- covers cases without subpatterns
 
 

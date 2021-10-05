@@ -7,6 +7,34 @@
 #include "./ffi.h"
 #include "./transactions.h"
 
+PyObject *
+PGF_checkoutBranch(PGFObject *self, PyObject *args)
+{
+    const char *s = NULL;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "s#", &s, &size))
+        return NULL;
+
+    PgfText *name = CString_AsPgfText(s, size);
+
+    PgfExn err;
+    PgfRevision rev = pgf_checkout_revision(self->db, name, &err);
+    FreePgfText(name);
+    if (handleError(err) != PGF_EXN_NONE) {
+        return NULL;
+    }
+    if (rev == 0) {
+        // is this possible?
+        PyErr_SetString(PyExc_KeyError, "unknown branch name");
+        return NULL;
+    }
+
+    pgf_free_revision(self->db, self->revision);
+    self->revision = rev;
+
+    Py_RETURN_TRUE;
+}
+
 TransactionObject *
 PGF_newTransaction(PGFObject *self, PyObject *args)
 {
@@ -17,15 +45,13 @@ PGF_newTransaction(PGFObject *self, PyObject *args)
         return NULL;
 
     if (s != NULL) {
-        name = (PgfText *)PyMem_Malloc(sizeof(PgfText)+size+1);
-        memcpy(name->text, s, size+1);
-        name->size = size;
+        name = CString_AsPgfText(s, size);
     }
 
     PgfExn err;
     PgfRevision rev = pgf_clone_revision(self->db, self->revision, name, &err);
     if (name != NULL) {
-        PyMem_Free(name);
+        FreePgfText(name);
     }
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
@@ -36,6 +62,61 @@ PGF_newTransaction(PGFObject *self, PyObject *args)
     trans->revision = rev;
 
     return trans;
+}
+
+PyObject *
+PGF_getGlobalFlag(PGFObject *self, PyObject *args)
+{
+    const char *s;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "s#", &s, &size))
+        return NULL;
+
+    PgfText *flagname = CString_AsPgfText(s, size);
+
+    PgfExn err;
+    PgfLiteral lit = pgf_get_global_flag(self->db, self->revision, flagname, &unmarshaller, &err);
+    FreePgfText(flagname);
+    if (handleError(err) != PGF_EXN_NONE) {
+        return NULL;
+    } else if (lit == 0) {
+        PyErr_Format(PyExc_KeyError, "unknown global flag '%s'", s);
+        return NULL;
+    }
+
+    return (PyObject *)lit;
+}
+
+
+PyObject *
+PGF_getAbstractFlag(PGFObject *self, PyObject *args)
+{
+    const char *s;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "s#", &s, &size))
+        return NULL;
+
+    PgfText *flagname = CString_AsPgfText(s, size);
+
+    PgfExn err;
+    PgfLiteral lit = pgf_get_abstract_flag(self->db, self->revision, flagname, &unmarshaller, &err);
+    FreePgfText(flagname);
+    if (handleError(err) != PGF_EXN_NONE) {
+        return NULL;
+    } else if (lit == 0) {
+        PyErr_Format(PyExc_KeyError, "unknown abstract flag '%s'", s);
+        return NULL;
+    }
+
+    return (PyObject *)lit;
+}
+
+// ----------------------------------------------------------------------------
+
+static void
+Transaction_dealloc(TransactionObject *self)
+{
+    Py_TYPE(self)->tp_free(self);
 }
 
 static PyObject *
@@ -49,7 +130,7 @@ Transaction_commit(TransactionObject *self, PyObject *args)
 
     pgf_free_revision(self->pgf->db, self->pgf->revision);
     self->pgf->revision = self->revision;
-    Py_INCREF(self->pgf->db);
+    Py_INCREF(self->pgf);
 
     Py_RETURN_NONE;
 }
@@ -61,17 +142,15 @@ Transaction_createFunction(TransactionObject *self, PyObject *args)
     Py_ssize_t size;
     TypeObject *type;
     Py_ssize_t arity = 0;
-    float prob = 0.0;
+    prob_t prob = 0.0;
     if (!PyArg_ParseTuple(args, "s#O!nf", &s, &size, &pgf_TypeType, &type, &arity, &prob))
         return NULL;
 
-    PgfText *fname = (PgfText *)PyMem_Malloc(sizeof(PgfText)+size+1);
-    memcpy(fname->text, s, size+1);
-    fname->size = size;
+    PgfText *funname = CString_AsPgfText(s, size);
 
     PgfExn err;
-    pgf_create_function(self->pgf->db, self->revision, fname, (PgfType) type, arity, prob, &marshaller, &err);
-    PyMem_Free(fname);
+    pgf_create_function(self->pgf->db, self->revision, funname, (PgfType) type, arity, prob, &marshaller, &err);
+    FreePgfText(funname);
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
@@ -87,13 +166,11 @@ Transaction_dropFunction(TransactionObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "s#", &s, &size))
         return NULL;
 
-    PgfText *fname = (PgfText *)PyMem_Malloc(sizeof(PgfText)+size+1);
-    memcpy(fname->text, s, size+1);
-    fname->size = size;
+    PgfText *funname = CString_AsPgfText(s, size);
 
     PgfExn err;
-    pgf_drop_function(self->pgf->db, self->revision, fname, &err);
-    PyMem_Free(fname);
+    pgf_drop_function(self->pgf->db, self->revision, funname, &err);
+    FreePgfText(funname);
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
@@ -107,29 +184,29 @@ Transaction_createCategory(TransactionObject *self, PyObject *args)
     const char *s;
     Py_ssize_t size;
     PyObject *hypos;
-    float prob = 0.0;
-    // if (!PyArg_ParseTuple(args, "s#O!f", &s, &size, &PyList_Type, &hypos, prob)) // segfaults in Python 3.8 but not 3.7
-    //     return NULL;
-    if (!PyArg_ParseTuple(args, "s#Of", &s, &size, &hypos, prob))
+    prob_t prob = 0.0;
+    if (!PyArg_ParseTuple(args, "s#Of", &s, &size, &hypos, &prob))
         return NULL;
-    if (!PyObject_TypeCheck(hypos, &PyList_Type)) {
-        PyErr_SetString(PyExc_TypeError, "hypos must be a list");
+    if (!PySequence_Check(hypos)) {
+        PyErr_SetString(PyExc_TypeError, "context must be a sequence");
         return NULL;
     }
-    // Py_INCREF(hypos);
 
-    PgfText *catname = (PgfText *)PyMem_Malloc(sizeof(PgfText)+size+1);
-    memcpy(catname->text, s, size+1);
-    catname->size = size;
+    PgfText *catname = CString_AsPgfText(s, size);
 
     Py_ssize_t n_hypos;
-    PgfTypeHypo *context = PyList_AsHypos(hypos, &n_hypos);
-    if (PyErr_Occurred())
+    PgfTypeHypo *context = PySequence_AsHypos(hypos, &n_hypos);
+    if (PyErr_Occurred()) {
+        FreePgfText(catname);
         return NULL;
+    }
 
     PgfExn err;
     pgf_create_category(self->pgf->db, self->revision, catname, n_hypos, context, prob, &marshaller, &err);
-    PyMem_Free(catname);
+
+    FreePgfText(catname);
+    FreeHypos(context, n_hypos);
+
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
@@ -145,13 +222,61 @@ Transaction_dropCategory(TransactionObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "s#", &s, &size))
         return NULL;
 
-    PgfText *catname = (PgfText *)PyMem_Malloc(sizeof(PgfText)+size+1);
-    memcpy(catname->text, s, size+1);
-    catname->size = size;
+    PgfText *catname = CString_AsPgfText(s, size);
 
     PgfExn err;
     pgf_drop_category(self->pgf->db, self->revision, catname, &err);
-    PyMem_Free(catname);
+    FreePgfText(catname);
+    if (handleError(err) != PGF_EXN_NONE) {
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+Transaction_setGlobalFlag(TransactionObject *self, PyObject *args)
+{
+    const char *s;
+    Py_ssize_t size;
+    PyObject *pyobj;
+    if (!PyArg_ParseTuple(args, "s#O", &s, &size, &pyobj))
+        return NULL;
+
+    PgfText *flagname = CString_AsPgfText(s, size);
+    if (!PyLong_Check(pyobj) && !PyFloat_Check(pyobj) && !PyUnicode_Check(pyobj)) {
+        PyErr_SetString(PyExc_TypeError, "flag value must be integer, float, or string");
+        return NULL;
+    }
+
+    PgfExn err;
+    pgf_set_global_flag(self->pgf->db, self->revision, flagname, (PgfLiteral) pyobj, &marshaller, &err);
+    FreePgfText(flagname);
+    if (handleError(err) != PGF_EXN_NONE) {
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+Transaction_setAbstractFlag(TransactionObject *self, PyObject *args)
+{
+    const char *s;
+    Py_ssize_t size;
+    PyObject *pyobj;
+    if (!PyArg_ParseTuple(args, "s#O", &s, &size, &pyobj))
+        return NULL;
+
+    PgfText *flagname = CString_AsPgfText(s, size);
+    if (!PyLong_Check(pyobj) && !PyFloat_Check(pyobj) && !PyUnicode_Check(pyobj)) {
+        PyErr_SetString(PyExc_TypeError, "flag value must be integer, float, or string");
+        return NULL;
+    }
+
+    PgfExn err;
+    pgf_set_abstract_flag(self->pgf->db, self->revision, flagname, (PgfLiteral) pyobj, &marshaller, &err);
+    FreePgfText(flagname);
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
@@ -209,12 +334,6 @@ exit:
     return return_value;
 }
 
-// static void
-// Transaction_dealloc(PGFObject* self)
-// {
-//     Py_TYPE(self)->tp_free((PyObject*)self);
-// }
-
 static PyGetSetDef Transaction_getseters[] = {
     {NULL}  /* Sentinel */
 };
@@ -228,13 +347,9 @@ static PyMethodDef Transaction_methods[] = {
      "Commit transaction"
     },
 
-    {"__enter__", (PyCFunction)Transaction_enter, METH_NOARGS,
-     ""
-    },
-
-    {"__exit__", (PyCFunction)(void(*)(void))Transaction_exit, METH_FASTCALL,
-     ""
-    },
+    // used in 'with'-syntax
+    {"__enter__", (PyCFunction)Transaction_enter, METH_NOARGS, ""},
+    {"__exit__", (PyCFunction)(void(*)(void))Transaction_exit, METH_FASTCALL, ""},
 
     {"createFunction", (PyCFunction)Transaction_createFunction, METH_VARARGS,
      "Create function"
@@ -248,6 +363,13 @@ static PyMethodDef Transaction_methods[] = {
     {"dropCategory", (PyCFunction)Transaction_dropCategory, METH_VARARGS,
      "Drop category"
     },
+
+    {"setGlobalFlag", (PyCFunction)Transaction_setGlobalFlag, METH_VARARGS,
+     "Set a global flag"
+    },
+    {"setAbstractFlag", (PyCFunction)Transaction_setAbstractFlag, METH_VARARGS,
+     "Set an abstract flag"
+    },
     {NULL}  /* Sentinel */
 };
 
@@ -257,7 +379,7 @@ PyTypeObject pgf_TransactionType = {
     "pgf.Transaction",                 /*tp_name*/
     sizeof(TransactionObject),         /*tp_basicsize*/
     0,                         /*tp_itemsize*/
-    0, //(destructor)Transaction_dealloc,   /*tp_dealloc*/
+    (destructor) Transaction_dealloc,   /*tp_dealloc*/
     0,                         /*tp_print*/
     0,                         /*tp_getattr*/
     0,                         /*tp_setattr*/

@@ -19,9 +19,7 @@ PgfExnType handleError(PgfExn err)
         PyErr_SetFromErrnoWithFilename(PyExc_IOError, err.msg);
     } else if (err.type == PGF_EXN_PGF_ERROR) {
         PyErr_SetString(PGFError, err.msg);
-        free((char*) err.msg);
-    } else if (err.type == PGF_EXN_OTHER_ERROR) {
-        PyErr_SetString(PGFError, "an unknown error occured");
+        free((char *)err.msg);
     }
     return err.type;
 }
@@ -30,19 +28,24 @@ PgfExnType handleError(PgfExn err)
 // conversions
 
 PgfText *
+CString_AsPgfText(const char *s, size_t size) {
+    PgfText *txt = (PgfText *)PyMem_RawMalloc(sizeof(PgfText)+size+1);
+    memcpy(txt->text, s, size+1);
+    txt->size = size;
+    return txt;
+}
+
+PgfText *
 PyUnicode_AsPgfText(PyObject *pystr)
 {
     if (!PyUnicode_Check(pystr)) {
         PyErr_SetString(PyExc_TypeError, "input to PyUnicode_AsPgfText is not a string");
         return NULL;
     }
-    if (PyUnicode_READY(pystr) != 0) {
-        return NULL;
-    }
 
     Py_ssize_t size;
     const char *enc = PyUnicode_AsUTF8AndSize(pystr, &size);
-    PgfText *ptext = malloc(sizeof(PgfText)+size+1);
+    PgfText *ptext = PyMem_RawMalloc(sizeof(PgfText)+size+1);
     memcpy(ptext->text, enc, size+1);
     ptext->size = size;
     return ptext;
@@ -55,49 +58,148 @@ PyUnicode_FromPgfText(PgfText *text)
 }
 
 PgfTypeHypo *
-PyList_AsHypos(PyObject *pylist, Py_ssize_t *n_hypos)
+PySequence_AsHypos(PyObject *pyseq, Py_ssize_t *n_hypos)
 {
-    if (!PyList_Check(pylist)) {
-        PyErr_SetString(PyExc_TypeError, "PyList_AsHypos: must be a list");
+    if (!PySequence_Check(pyseq)) {
+        PyErr_SetString(PyExc_TypeError, "hypotheses must be a sequence");
         return NULL;
     }
-    Py_ssize_t n = PyList_Size(pylist);
+    Py_ssize_t n = PySequence_Size(pyseq);
     *n_hypos = n;
-    PgfTypeHypo *hypos = PyMem_Malloc(sizeof(PgfTypeHypo)*n);
+    PgfTypeHypo *hypos = PyMem_RawMalloc(sizeof(PgfTypeHypo)*n);
 
     for (Py_ssize_t i = 0; i < n; i++) {
-        PyObject *hytup = PyList_GetItem(pylist, i);
-        if (!PyTuple_Check(hytup)) {
-            PyErr_SetString(PyExc_TypeError, "PyList_AsHypos: item must be a tuple");
+        // PyObject *item = PySequence_GetItem(pyseq, i);
+        // if (!PyObject_TypeCheck(item, &pgf_HypoType)) {
+        //     PyErr_SetString(PyExc_TypeError, "hypothesis must be of type Hypo");
+        //     return NULL;
+        // }
+        // HypoObject *hypo = (HypoObject *)item;
+        // hypos[i].bind_type = hypo->bind_type == Py_True ? 0 : 1;
+        // hypos[i].cid = PyUnicode_AsPgfText(hypo->cid);
+        // hypos[i].type = (PgfType) hypo->type;
+
+        PyObject *tup = PySequence_GetItem(pyseq, i);
+        if (!PyTuple_Check(tup)) {
+            PyErr_SetString(PyExc_TypeError, "hypothesis must be a tuple");
             return NULL;
         }
 
-        PyObject *t0 = PyTuple_GetItem(hytup, 0);
+        PyObject *t0 = PyTuple_GetItem(tup, 0);
         if (!PyLong_Check(t0)) {
-            PyErr_SetString(PyExc_TypeError, "PyList_AsHypos: first element must be an integer");
+            PyErr_SetString(PyExc_TypeError, "hypothesis bind type must be an boolean");
             return NULL;
         }
-        hypos[i].bind_type = PyLong_AsLong(t0);
+        hypos[i].bind_type = t0 == Py_True ? 0 : 1;
 
-        PyObject *t1 = PyTuple_GetItem(hytup, 1);
+        PyObject *t1 = PyTuple_GetItem(tup, 1);
         if (!PyUnicode_Check(t1)) {
-            PyErr_SetString(PyExc_TypeError, "PyList_AsHypos: second element must be a string");
+            PyErr_SetString(PyExc_TypeError, "hypothesis variable must be a string");
             return NULL;
         }
         hypos[i].cid = PyUnicode_AsPgfText(t1);
 
-        PyObject *t2 = PyTuple_GetItem(hytup, 2);
+        PyObject *t2 = PyTuple_GetItem(tup, 2);
         if (!PyObject_TypeCheck(t2, &pgf_TypeType)) {
-            PyErr_SetString(PyExc_TypeError, "PyList_AsHypos: third element must be a Type");
+            PyErr_SetString(PyExc_TypeError, "hypothesis type must be a Type");
             return NULL;
         }
         hypos[i].type = (PgfType) t2;
+
         Py_INCREF(hypos[i].type);
     }
 
     return hypos;
 }
 
+PyObject *
+PyList_FromHypos(PgfTypeHypo *hypos, const size_t n_hypos)
+{
+    PyObject *pylist = PyList_New(n_hypos);
+    if (pylist == NULL) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < n_hypos; i++) {
+        // HypoObject *hypo = PyObject_New(HypoObject, &pgf_HypoType);
+        // hypo->bind_type = hypos[i].bind_type == 0 ? Py_True : Py_False;
+        // hypo->cid = PyUnicode_FromStringAndSize(hypos[i].cid->text, hypos[i].cid->size);
+        // hypo->type = (TypeObject *)hypos[i].type;
+        // Py_INCREF(hypo->bind_type);
+        // Py_INCREF(hypo->type);
+        // PyList_SetItem(pylist, i, (PyObject *)hypo);
+
+        PyObject *tup = PyTuple_New(3);
+        PyObject *bt = hypos[i].bind_type == 0 ? Py_True : Py_False;
+        PyTuple_SetItem(tup, 0, bt);
+        PyTuple_SetItem(tup, 1, PyUnicode_FromStringAndSize(hypos[i].cid->text, hypos[i].cid->size));
+        PyTuple_SetItem(tup, 2, (PyObject *)hypos[i].type);
+        Py_INCREF(bt);
+        Py_INCREF(hypos[i].type);
+        PyList_SetItem(pylist, i, tup);
+    }
+    if (PyErr_Occurred()) {
+        Py_DECREF(pylist);
+        return NULL;
+    }
+
+    return pylist;
+}
+
+PgfPrintContext *
+PyList_AsPgfPrintContext(PyObject *pylist)
+{
+    PgfPrintContext *ctxt = NULL;
+    for (Py_ssize_t i = PyList_Size(pylist); i > 0 ; i--) {
+        PyObject *item = PyList_GetItem(pylist, i-1);
+        if (!PyUnicode_Check(item)) {
+            PyErr_SetString(PyExc_TypeError, "variable argument in context must be a string");
+            return NULL;
+        }
+
+        if (PyUnicode_READY(item) != 0) {
+            return NULL;
+        }
+
+        Py_ssize_t size;
+        const char *enc = PyUnicode_AsUTF8AndSize(item, &size);
+
+        PgfPrintContext *this = (PgfPrintContext *)PyMem_RawMalloc(sizeof(PgfPrintContext) + size + 1);
+        this->next = ctxt;
+        this->name.size = size;
+        memcpy(&this->name.text, enc, size+1);
+        ctxt = this;
+    }
+
+    return ctxt;
+}
+
+// ----------------------------------------------------------------------------
+// freers
+
+void
+FreePgfText(PgfText *txt)
+{
+    PyMem_RawFree(txt);
+}
+
+void
+FreeHypos(PgfTypeHypo *hypos, Py_ssize_t n_hypos)
+{
+    for (Py_ssize_t i = 0; i < n_hypos; i++) {
+        FreePgfText(hypos[i].cid);
+        Py_DECREF(hypos[i].type);
+    }
+    PyMem_RawFree(hypos);
+}
+
+void
+FreePgfPrintContext(PgfPrintContext *ctxt)
+{
+    if (ctxt == NULL) return;
+    FreePgfPrintContext(ctxt->next);
+    PyMem_RawFree(ctxt);
+}
 
 // ----------------------------------------------------------------------------
 // unmarshaller
@@ -106,10 +208,11 @@ static PgfExpr
 eabs(PgfUnmarshaller *this, PgfBindType btype, PgfText *name, PgfExpr body)
 {
     ExprAbsObject *pyexpr = (ExprAbsObject *)pgf_ExprAbsType.tp_alloc(&pgf_ExprAbsType, 0);
-    pyexpr->bindType = PyLong_FromLong(btype);
-    pyexpr->var = PyUnicode_FromPgfText(name);
-    pyexpr->expr = (ExprObject *)body;
-    // Py_INCREF(body);
+    pyexpr->bind_type = btype == 0 ? Py_True : Py_False;
+    pyexpr->name = PyUnicode_FromPgfText(name);
+    pyexpr->body = (ExprObject *)body;
+    Py_INCREF(pyexpr->bind_type);
+    Py_INCREF(body);
     return (PgfExpr) pyexpr;
 }
 
@@ -117,10 +220,10 @@ static PgfExpr
 eapp(PgfUnmarshaller *this, PgfExpr fun, PgfExpr arg)
 {
     ExprAppObject *pyexpr = (ExprAppObject *)pgf_ExprAppType.tp_alloc(&pgf_ExprAppType, 0);
-    pyexpr->e1 = (ExprObject *)fun;
-    pyexpr->e2 = (ExprObject *)arg;
-    // Py_INCREF(fun);
-    // Py_INCREF(arg);
+    pyexpr->fun = (ExprObject *)fun;
+    pyexpr->arg = (ExprObject *)arg;
+    Py_INCREF(fun);
+    Py_INCREF(arg);
     return (PgfExpr) pyexpr;
 }
 
@@ -129,7 +232,7 @@ elit(PgfUnmarshaller *this, PgfLiteral lit)
 {
     ExprLitObject *pyexpr = (ExprLitObject *)pgf_ExprLitType.tp_alloc(&pgf_ExprLitType, 0);
     PyObject *pyobj = (PyObject *)lit;
-    pyexpr->value = pyobj;
+    pyexpr->lit = pyobj;
     Py_INCREF(pyobj);
     return (PgfExpr) pyexpr;
 }
@@ -146,9 +249,7 @@ static PgfExpr
 efun(PgfUnmarshaller *this, PgfText *name)
 {
     ExprFunObject *pyexpr = (ExprFunObject *)pgf_ExprFunType.tp_alloc(&pgf_ExprFunType, 0);
-    PyObject *pyobj = PyUnicode_FromPgfText(name);
-    pyexpr->name = pyobj;
-    Py_INCREF(pyobj);
+    pyexpr->name = PyUnicode_FromPgfText(name);
     return (PgfExpr) pyexpr;
 }
 
@@ -156,7 +257,7 @@ static PgfExpr
 evar(PgfUnmarshaller *this, int index)
 {
     ExprVarObject *pyexpr = (ExprVarObject *)pgf_ExprVarType.tp_alloc(&pgf_ExprVarType, 0);
-    pyexpr->index = PyLong_FromLong(index);
+    pyexpr->var = PyLong_FromLong(index);
     return (PgfExpr) pyexpr;
 }
 
@@ -166,8 +267,8 @@ etyped(PgfUnmarshaller *this, PgfExpr expr, PgfType typ)
     ExprTypedObject *pyexpr = (ExprTypedObject *)pgf_ExprTypedType.tp_alloc(&pgf_ExprTypedType, 0);
     pyexpr->expr = (ExprObject *)expr;
     pyexpr->type = (TypeObject *)typ;
-    // Py_INCREF(expr);
-    // Py_INCREF(typ);
+    Py_INCREF(expr);
+    Py_INCREF(typ);
     return (PgfExpr) pyexpr;
 }
 
@@ -176,28 +277,34 @@ eimplarg(PgfUnmarshaller *this, PgfExpr expr)
 {
     ExprImplArgObject *pyexpr = (ExprImplArgObject *)pgf_ExprImplArgType.tp_alloc(&pgf_ExprImplArgType, 0);
     pyexpr->expr = (ExprObject *)expr;
-    // Py_INCREF(expr);
+    Py_INCREF(expr);
     return (PgfExpr) pyexpr;
 }
 
 static PgfLiteral
 lint(PgfUnmarshaller *this, size_t size, uintmax_t *v)
 {
-    intmax_t *v0 = (intmax_t *)v;
-    PyObject *i = PyLong_FromLong(*v0);
-
     if (size == 0) {
-        return (PgfLiteral) 0;
+        return (PgfLiteral) PyLong_FromLong(0);
     } else {
-        PyObject *intShifter = PyLong_FromUnsignedLong(pow(10, floor(log10(ULONG_MAX))));
+        intmax_t *v0 = (intmax_t *)v;
+        PyObject *i = PyLong_FromLong(*v0);
+        PyObject *intShifter = PyLong_FromUnsignedLong(LINT_BASE);
         for (size_t n = 1; n < size; n++) {
-            i = PyNumber_Multiply(i, intShifter);
+            PyObject *tmp = PyNumber_Multiply(i, intShifter);
+            Py_DECREF(i);
+            i = tmp;
+            PyObject *py_v = PyLong_FromUnsignedLong(v[n]);
             if (*v0 >= 0) {
-                i = PyNumber_Add(i, PyLong_FromUnsignedLong(v[n]));
+                tmp = PyNumber_Add(i, py_v);
             } else {
-                i = PyNumber_Subtract(i, PyLong_FromUnsignedLong(v[n]));
+                tmp = PyNumber_Subtract(i, py_v);
             }
+            Py_DECREF(py_v);
+            Py_DECREF(i);
+            i = tmp;
         }
+        Py_DECREF(intShifter);
         if (PyErr_Occurred()) {
             return 0;
         }
@@ -224,21 +331,13 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 {
     TypeObject *pytype = (TypeObject *)pgf_TypeType.tp_alloc(&pgf_TypeType, 0);
 
-    pytype->hypos = PyList_New(n_hypos);
-    for (int i = 0; i < n_hypos; i++) {
-        PyObject *tup = PyTuple_New(3);
-        PyTuple_SetItem(tup, 0, PyLong_FromLong(hypos[i].bind_type));
-        PyTuple_SetItem(tup, 1, PyUnicode_FromStringAndSize(hypos[i].cid->text, hypos[i].cid->size));
-        PyTuple_SetItem(tup, 2, (PyObject *)hypos[i].type);
-        Py_INCREF(hypos[i].type);
-        PyList_SetItem(pytype->hypos, i, tup);
-    }
-
-    pytype->cat = PyUnicode_FromStringAndSize(cat->text, cat->size);
-
-    pytype->exprs = PyList_New(n_exprs);
+    pytype->hypos = PySequence_Tuple(PyList_FromHypos(hypos, n_hypos));
+    pytype->name = PyUnicode_FromStringAndSize(cat->text, cat->size);
+    pytype->exprs = PyTuple_New(n_exprs);
     for (int i = 0; i < n_exprs; i++) {
-        PyList_SetItem(pytype->exprs, i, (PyObject *)exprs[i]);
+        PyObject *expr = (PyObject *)exprs[i];
+        PyTuple_SetItem(pytype->exprs, i, expr);
+        Py_INCREF(expr);
     }
 
     return (PgfType) pytype;
@@ -247,7 +346,7 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 static void
 free_ref(PgfUnmarshaller *this, object x)
 {
-    // Py_XDECREF(x);
+    Py_XDECREF((PyObject *) x);
 }
 
 static PgfUnmarshallerVtbl unmarshallerVtbl =
@@ -278,42 +377,61 @@ match_lit(PgfMarshaller *this, PgfUnmarshaller *u, PgfLiteral lit)
     PyObject *pyobj = (PyObject *)lit;
 
     if (PyLong_Check(pyobj)) {
-        PyObject *intShifter = PyLong_FromUnsignedLong(pow(10, floor(log10(ULONG_MAX))));
+        PyObject *intShifter = PyLong_FromUnsignedLong(LINT_BASE);
 
         // determine size
         size_t size = 1;
-        PyObject *x = PyNumber_Absolute(PyNumber_Long(pyobj)); // make a copy, ignore sign
+        PyObject *x = PyNumber_Absolute(pyobj); // make a copy, ignore sign
         while (PyObject_RichCompareBool(x, intShifter, Py_GE) == 1) {
             size++;
-            x = PyNumber_FloorDivide(x, intShifter);
+            PyObject *tmp = PyNumber_FloorDivide(x, intShifter);
+            Py_DECREF(x);
+            x = tmp;
         }
+        Py_DECREF(x);
 
         // chop up into chunks, always positive
-        bool isPos = PyObject_RichCompareBool(pyobj, PyLong_FromLong(0), Py_GE) == 1;
-        x = PyNumber_Absolute(PyNumber_Long(pyobj)); // make a copy, ignore sign
-        uintmax_t *i = malloc(sizeof(uintmax_t)*size);
+        PyObject *zero = PyLong_FromLong(0);
+        bool isPos = PyObject_RichCompareBool(pyobj, zero, Py_GE) == 1;
+        Py_DECREF(zero);
+        x = PyNumber_Absolute(pyobj); // make a copy, ignore sign
+        uintmax_t *i = PyMem_RawMalloc(sizeof(uintmax_t)*size); // TODO when does this get freed?
         for (int n = size-1; n > 0; n--) {
             PyObject *rem = PyNumber_Remainder(x, intShifter);
             i[n] = PyLong_AsUnsignedLong(rem);
-            x = PyNumber_FloorDivide(x, intShifter);
+            Py_DECREF(rem);
+            PyObject *tmp = PyNumber_FloorDivide(x, intShifter);
+            Py_DECREF(x);
+            x = tmp;
         }
+
+        Py_DECREF(intShifter);
 
         // first chunk, re-applying polarity
         if (isPos)
             i[0] = PyLong_AsLong(x);
         else
-            i[0] = PyLong_AsLong(PyNumber_Negative(x));
+            i[0] = -PyLong_AsLong(x);
+
+        Py_DECREF(x);
 
         if (PyErr_Occurred()) {
             return 0;
         }
-        return u->vtbl->lint(u, size, i);
+
+        object res = u->vtbl->lint(u, size, i);
+
+        PyMem_RawFree(i);
+
+        return res;
     } else if (PyFloat_Check(pyobj)) {
         double d = PyFloat_AsDouble(pyobj);
         return u->vtbl->lflt(u, d);
     } else if (PyUnicode_Check(pyobj)) {
         PgfText *t = PyUnicode_AsPgfText(pyobj);
-        return u->vtbl->lstr(u, t);
+        object res = u->vtbl->lstr(u, t);
+        FreePgfText(t);
+        return res;
     } else {
         PyErr_SetString(PyExc_TypeError, "unable to match on literal");
         return 0;
@@ -327,15 +445,19 @@ match_expr(PgfMarshaller *this, PgfUnmarshaller *u, PgfExpr expr)
 
     if (PyObject_TypeCheck(pyobj, &pgf_ExprAbsType)) {
         ExprAbsObject *eabs = (ExprAbsObject *)expr;
-        return u->vtbl->eabs(u, PyLong_AsLong(eabs->bindType), PyUnicode_AsPgfText(eabs->var), (PgfExpr) eabs->expr);
+        long bt = eabs->bind_type == Py_True ? 0 : 1;
+        PgfText *name = PyUnicode_AsPgfText(eabs->name);
+        object res = u->vtbl->eabs(u, bt, name, (PgfExpr) eabs->body);
+        FreePgfText(name);
+        return res;
     } else
     if (PyObject_TypeCheck(pyobj, &pgf_ExprAppType)) {
         ExprAppObject *eapp = (ExprAppObject *)expr;
-        return u->vtbl->eapp(u, (PgfExpr) eapp->e1, (PgfExpr) eapp->e2);
+        return u->vtbl->eapp(u, (PgfExpr) eapp->fun, (PgfExpr) eapp->arg);
     } else
     if (PyObject_TypeCheck(pyobj, &pgf_ExprLitType)) {
         ExprLitObject *elit = (ExprLitObject *)expr;
-        return this->vtbl->match_lit(this, u, (PgfLiteral) elit->value);
+        return this->vtbl->match_lit(this, u, (PgfLiteral) elit->lit);
     } else
     if (PyObject_TypeCheck(pyobj, &pgf_ExprMetaType)) {
         ExprMetaObject *emeta = (ExprMetaObject *)expr;
@@ -343,11 +465,14 @@ match_expr(PgfMarshaller *this, PgfUnmarshaller *u, PgfExpr expr)
     } else
     if (PyObject_TypeCheck(pyobj, &pgf_ExprFunType)) {
         ExprFunObject *efun = (ExprFunObject *)expr;
-        return u->vtbl->efun(u, PyUnicode_AsPgfText(efun->name));
+        PgfText *name = PyUnicode_AsPgfText(efun->name);
+        object res = u->vtbl->efun(u, name);
+        FreePgfText(name);
+        return res;
     } else
     if (PyObject_TypeCheck(pyobj, &pgf_ExprVarType)) {
         ExprVarObject *evar = (ExprVarObject *)expr;
-        return u->vtbl->evar(u, PyLong_AsLong(evar->index));
+        return u->vtbl->evar(u, PyLong_AsLong(evar->var));
     } else
     if (PyObject_TypeCheck(pyobj, &pgf_ExprTypedType)) {
         ExprTypedObject *etyped = (ExprTypedObject *)expr;
@@ -368,19 +493,20 @@ match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
     TypeObject *type = (TypeObject *)ty;
 
     Py_ssize_t n_hypos;
-    PgfTypeHypo *hypos = PyList_AsHypos(type->hypos, &n_hypos);
-    if (PyErr_Occurred())
+    PgfTypeHypo *hypos = PySequence_AsHypos(type->hypos, &n_hypos);
+    if (hypos == NULL) {
         return 0;
+    }
 
-    PgfText *cat = PyUnicode_AsPgfText(type->cat);
+    PgfText *cat = PyUnicode_AsPgfText(type->name);
     if (cat == NULL) {
         return 0;
     }
 
-    Py_ssize_t n_exprs = PyList_Size(type->exprs);
+    Py_ssize_t n_exprs = PySequence_Size(type->exprs);
     PgfExpr exprs[n_exprs];
     for (Py_ssize_t i = 0; i < n_exprs; i++) {
-        exprs[i] = (PgfExpr)PyList_GetItem(type->exprs, i);
+        exprs[i] = (PgfExpr)PySequence_GetItem(type->exprs, i);
         Py_INCREF(exprs[i]);
     }
 
@@ -389,11 +515,8 @@ match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
     for (Py_ssize_t i = 0; i < n_exprs; i++) {
         Py_DECREF(exprs[i]);
     }
-    for (Py_ssize_t i = 0; i < n_hypos; i++) {
-        free(hypos[i].cid);
-        Py_DECREF(hypos[i].type);
-    }
-    free(cat);
+    FreeHypos(hypos, n_hypos);
+    FreePgfText(cat);
 
     return res;
 }
