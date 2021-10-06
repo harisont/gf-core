@@ -9,6 +9,8 @@
 #include <pgf/pgf.h>
 #include "./ffi.h"
 
+JNIEnv *env;
+
 PGF_API uint32_t
 pgf_utf8_decode(const uint8_t** src_inout)
 {
@@ -88,8 +90,85 @@ jstring2pgf_text(JNIEnv *env, jstring s)
 
 // marshalling/unmarshalling
 
+static PgfExpr
+eabs(PgfUnmarshaller *this, PgfBindType btype, PgfText *name, PgfExpr body)
+{
+	//TODO:
+	return NULL;
+}
+
+static PgfExpr
+eapp(PgfUnmarshaller *this, PgfExpr fun, PgfExpr arg)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfExpr
+elit(PgfUnmarshaller *this, PgfLiteral lit)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfExpr
+emeta(PgfUnmarshaller *this, PgfMetaId meta)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfExpr
+efun(PgfUnmarshaller *this, PgfText *name)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfExpr
+evar(PgfUnmarshaller *this, int index)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfExpr
+etyped(PgfUnmarshaller *this, PgfExpr expr, PgfType typ)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfExpr
+eimplarg(PgfUnmarshaller *this, PgfExpr expr)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfLiteral
+lint(PgfUnmarshaller *this, size_t size, uintmax_t *v)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfLiteral
+lflt(PgfUnmarshaller *this, double v)
+{
+    //TODO:
+	return NULL;
+}
+
+static PgfLiteral
+lstr(PgfUnmarshaller *this, PgfText *v)
+{
+    //TODO:
+	return NULL;
+}
+
 JPGF_INTERNAL PgfType
-dtyp(JNIEnv *env, PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n_exprs, PgfExpr *exprs)
+dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n_exprs, PgfExpr *exprs)
 {
 	// construct empty list (TODO: handle failures?)
 	jclass lClass = (*env)->FindClass(env, "java/util/ArrayList");
@@ -107,7 +186,7 @@ dtyp(JNIEnv *env, PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfTex
 		// get bindType, var and type from current Hypo
 		jboolean bindType = (jboolean)hypos[i].bind_type; // will this cast work? lo scopriremo solo vivendo
 		jstring var = pgf_text2jstring(env,hypos[i].cid); // and does this function actually work?
-		jobject type = (jobject)hypos[i].type; // but actually Type or jobject? mmm
+		jobject type = (jobject)hypos[i].type;
 
 		// construct Hypo object
 		jobject hObj = (*env)->NewObject(env, hClass, hConstr, bindType, var, type);
@@ -130,3 +209,28 @@ dtyp(JNIEnv *env, PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfTex
 	// return it casted to PgfType 
 	return (PgfType) type ;
 }
+
+static void
+free_ref(PgfUnmarshaller *this, object x)
+{
+    //TODO: 
+}
+
+static PgfUnmarshallerVtbl unmarshallerVtbl =
+{
+    eabs,
+    eapp,
+    elit,
+    emeta,
+    efun,
+    evar,
+    etyped,
+    eimplarg,
+    lint,
+    lflt,
+    lstr,
+    dtyp,
+    free_ref
+};
+
+PgfUnmarshaller unmarshaller = { &unmarshallerVtbl };

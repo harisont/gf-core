@@ -15,5 +15,7 @@ JPGF_INTERNAL_DECL PgfText*
 jstring2pgf_text(JNIEnv *env, jstring s);
 
 // marshalling/unmarshalling
-//PgfUnmarshaller unmarshaller;
+PgfUnmarshaller unmarshaller;
 //PgfMarshaller marshaller;
+
+extern JNIEnv *env;*
