@@ -3,7 +3,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.util.Arrays;
-import java.util.List;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -251,5 +250,29 @@ public class TestBasic {
     PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
     String[] funsArray = {};
     assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
+  }
+
+  // types
+
+  @Test
+  public void readType_Invalid() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      Type.readType("->");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
+
+  @Test // TODO: remove, it isn't really relevant
+  public void readType_Valid() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      Type.readType("S");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertFalse(thrown);
   }
 }

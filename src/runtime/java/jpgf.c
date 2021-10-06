@@ -327,6 +327,26 @@ Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 	pgf_free_revision(db, rev);
 }
 
+// types
+
+JNIEXPORT jobject JNICALL 
+Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass clazz, jstring s)
+{
+	PgfExn err;
+
+	PgfText* in = jstring2pgf_text(env, s);
+
+	PgfType t = pgf_read_type(in, &unmarshaller);
+
+	if (t == 0) {
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "type cannot be parsed");
+        return NULL;
+    }
+
+    return t;
+}
+
+
 /*
 typedef struct {
 	GuInStream stream;
@@ -1777,34 +1797,6 @@ Java_org_grammaticalframework_pgf_Type_getHypos(JNIEnv* env, jobject self)
 		(*env)->DeleteLocalRef(env, jhypo);
 	}
 	return jhypos;
-}
-
-JNIEXPORT jobject JNICALL 
-Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass clazz, jstring s)
-{
-	GuPool* pool = gu_new_pool();
-
-	GuPool* tmp_pool = gu_local_pool();
-	GuString buf = j2gu_string(env, s, tmp_pool);
-	GuIn* in = gu_data_in((uint8_t*) buf, strlen(buf), tmp_pool);
-	GuExn* err = gu_exn(tmp_pool);
-
-	PgfType* ty = pgf_read_type(in, pool, tmp_pool, err);
-	if (!gu_ok(err)) {
-		throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "The type cannot be parsed");
-		gu_pool_free(tmp_pool);
-		gu_pool_free(pool);
-		return NULL;
-	}
-
-	gu_pool_free(tmp_pool);
-
-	jclass pool_class = (*env)->FindClass(env, "org/grammaticalframework/pgf/Pool");
-	jmethodID pool_constrId = (*env)->GetMethodID(env, pool_class, "<init>", "(J)V");
-	jobject jpool = (*env)->NewObject(env, pool_class, pool_constrId, p2l(pool));
-
-	jmethodID constrId = (*env)->GetMethodID(env, clazz, "<init>", "(Ljava/lang/Object;J)V");
-	return (*env)->NewObject(env, clazz, constrId, jpool, p2l(ty));
 }
 
 JNIEXPORT jstring JNICALL
