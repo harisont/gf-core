@@ -254,19 +254,8 @@ public class TestBasic {
 
   // types
 
-  @Test
-  public void readType_Invalid() throws FileNotFoundException {
-    boolean thrown = false;
-    try {
-      Type.readType("->");
-    } catch (PGFError e) {
-      thrown = true;
-    }
-    assertTrue(thrown);
-  }
-
-  @Test // TODO: remove, it isn't really relevant
-  public void readType_Valid() throws FileNotFoundException {
+  @Test 
+  public void readType_OK() throws FileNotFoundException {
     boolean thrown = false;
     try {
       Type.readType("S");
@@ -274,5 +263,16 @@ public class TestBasic {
       thrown = true;
     }
     assertFalse(thrown);
+  }
+
+  @Test
+  public void readType_InvalidType() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      Type.readType("->");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
   }
 }
