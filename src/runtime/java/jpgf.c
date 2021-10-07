@@ -8,6 +8,7 @@
 #include "./ffi.h"
 
 static JavaVM* cachedJVM;
+static JNIEnv *env;
 
 typedef struct {
 	PgfItor fn;
@@ -16,8 +17,6 @@ typedef struct {
 	jobject object;
 	jmethodID method_id;
 } JPGFClosure;
-
-JNIEnv *env;
 
 // marshalling/unmarshalling
 
@@ -100,7 +99,9 @@ lstr(PgfUnmarshaller *this, PgfText *v)
 
 JPGF_INTERNAL PgfType
 dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n_exprs, PgfExpr *exprs)
-{
+{	
+	JNIEnv *env;
+    (*cachedJVM)->AttachCurrentThread(cachedJVM, (void **)&env, NULL);
 	// construct empty list (TODO: handle failures?)
 	jclass lClass = (*env)->FindClass(env, "java/util/ArrayList");
 	jmethodID lConstr = (*env)->GetMethodID(env, lClass, "<init>", "()V");
@@ -135,10 +136,11 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 	// construct a Java Type object
 	jclass tClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Type");
 	jmethodID tConstr = (*env)->GetMethodID(env, tClass, "<init>", "()V");
-	jobject type = (*env)->NewObject(env, tClass, tConstr, lHypos, cString, lExprs);
+	//jobject type = (*env)->NewObject(env, tClass, tConstr, lHypos, cString, lExprs);
 
 	// return it casted to PgfType 
-	return (PgfType) type ;
+	//return (PgfType) type ;
+	return NULL ;
 }
 
 static void
@@ -479,20 +481,20 @@ Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 // types
 
 JNIEXPORT jobject JNICALL 
-Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass clazz, jstring s)
+Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring s)
 {
-	PgfExn err;
 
 	PgfText* in = jstring2pgf_text(env, s);
 
-	PgfType t = pgf_read_type(in, &unmarshaller);
+	// this line causes a core dumped, hence the unmarshaller is the problem
+	PgfType pgfType = pgf_read_type(in, &unmarshaller);
 
-	if (t == 0) {
+	if (pgfType == 0) {
         throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "type cannot be parsed");
         return NULL;
     }
 
-    return t;
+	return (jobject)pgfType;
 }
 
 
