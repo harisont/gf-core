@@ -24,77 +24,66 @@ static PgfExpr
 eabs(PgfUnmarshaller *this, PgfBindType btype, PgfText *name, PgfExpr body)
 {
 	//TODO:
-	return NULL;
 }
 
 static PgfExpr
 eapp(PgfUnmarshaller *this, PgfExpr fun, PgfExpr arg)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfExpr
 elit(PgfUnmarshaller *this, PgfLiteral lit)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfExpr
 emeta(PgfUnmarshaller *this, PgfMetaId meta)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfExpr
 efun(PgfUnmarshaller *this, PgfText *name)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfExpr
 evar(PgfUnmarshaller *this, int index)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfExpr
 etyped(PgfUnmarshaller *this, PgfExpr expr, PgfType typ)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfExpr
 eimplarg(PgfUnmarshaller *this, PgfExpr expr)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfLiteral
 lint(PgfUnmarshaller *this, size_t size, uintmax_t *v)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfLiteral
 lflt(PgfUnmarshaller *this, double v)
 {
     //TODO:
-	return NULL;
 }
 
 static PgfLiteral
 lstr(PgfUnmarshaller *this, PgfText *v)
 {
     //TODO:
-	return NULL;
 }
 
 JPGF_INTERNAL PgfType
@@ -102,7 +91,6 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 {	
 	JNIEnv *env;
     (*cachedJVM)->AttachCurrentThread(cachedJVM, (void **)&env, NULL);
-	// construct empty list (TODO: handle failures?)
 	jclass lClass = (*env)->FindClass(env, "java/util/ArrayList");
 	jmethodID lConstr = (*env)->GetMethodID(env, lClass, "<init>", "()V");
 	jobject lHypos = (*env)->NewObject(env, lClass, lConstr);
@@ -112,7 +100,7 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 
 	// get constructor id of Hypo class
 	jclass hClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
-	jmethodID hConstr = (*env)->GetMethodID(env, hClass, "<init>", "(Ljava/lang/Object;J)V");		
+	jmethodID hConstr = (*env)->GetMethodID(env, hClass, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
 
 	for (int i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
@@ -485,11 +473,10 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 
 	PgfText* in = jstring2pgf_text(env, s);
 
-	// this line causes a core dumped, hence the unmarshaller is the problem
 	PgfType pgfType = pgf_read_type(in, &unmarshaller);
 
 	if (pgfType == 0) {
-        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "type cannot be parsed");
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", in->text);
         return NULL;
     }
 

@@ -51,7 +51,8 @@ JNIEXPORT PgfExnType handleError(JNIEnv *env, PgfExn err)
 
 JPGF_INTERNAL jstring 
 pgf_text2jstring(JNIEnv *env, PgfText *s) 
-{
+{	
+	return (*env)->NewStringUTF(env, s->text);
 	const char* utf8s = s->text;
     const char* utf8 = s->text;
     size_t len = s->size ;
@@ -78,10 +79,10 @@ JPGF_INTERNAL PgfText*
 jstring2pgf_text(JNIEnv *env, jstring s)
 {
 	const char* text = (*env)->GetStringUTFChars(env, s, 0);
-	jsize size = (*env)->GetStringLength(env, s);
+	jsize size = (*env)->GetStringUTFLength(env, s);
 	PgfText *pgfText = (PgfText*)malloc(sizeof(PgfText));
 	memcpy(pgfText->text, text, size);
-	pgfText->size = (size_t)s;
+	pgfText->size = (size_t)size; // might be THE change to make
 	(*env)->ReleaseStringUTFChars(env, s, text);
 	return pgfText;
 }
