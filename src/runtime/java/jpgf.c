@@ -135,12 +135,11 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 
 	// construct a Java Type object
 	jclass tClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Type");
-	jmethodID tConstr = (*env)->GetMethodID(env, tClass, "<init>", "()V");
-	//jobject type = (*env)->NewObject(env, tClass, tConstr, lHypos, cString, lExprs);
+	jmethodID tConstr = (*env)->GetMethodID(env, tClass, "<init>", "([Lorg/grammaticalframework/pgf/Hypo;Ljava/lang/String;[Lorg/grammaticalframework/pgf/Expr;)V");
+	jobject type = (*env)->NewObject(env, tClass, tConstr, lHypos, cString, lExprs);
 
 	// return it casted to PgfType 
-	//return (PgfType) type ;
-	return NULL ;
+	return (PgfType) type ;
 }
 
 static void
