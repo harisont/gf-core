@@ -35,9 +35,8 @@ import GF.Text.Pretty
 import Data.Maybe (isNothing)
 import Data.List  (intersperse)
 import qualified Data.Map as Map
---import qualified Data.IntMap as IntMap
---import qualified Data.Set as Set
 import qualified Data.Array.IArray as Array
+import qualified GHC.Show
 
 data TermPrintQual
   = Terse | Unqualified | Qualified | Internal
@@ -241,7 +240,6 @@ ppTerm q d (Typed e t) = '<' <> ppTerm q 0 e <+> ':' <+> ppTerm q 0 t <> '>'
 ppTerm q d (ImplArg e) = braces (ppTerm q 0 e)
 ppTerm q d (ELincat cat t) = prec d 4 ("lincat" <+> cat <+> ppTerm q 5 t)
 ppTerm q d (ELin cat t) = prec d 4 ("lin" <+> cat <+> ppTerm q 5 t)
-ppTerm q d (Error s)   = prec d 4 ("Predef.error" <+> str s)
 
 ppEquation q (ps,e) = hcat (map (ppPatt q 2) ps) <+> "->" <+> ppTerm q 0 e
 
@@ -289,7 +287,12 @@ ppConstrs = map (\(v,w) -> braces (ppValue Unqualified 0 v <+> "<>" <+> ppValue 
 ppEnv :: Env -> Doc
 ppEnv e = hcat (map (\(x,t) -> braces (x <> ":=" <> ppValue Unqualified 0 t)) e)
 
-str s = doubleQuotes s
+str s = doubleQuotes (pp (foldr showLitChar "" s))
+  where
+    showLitChar c
+      | c == '"'    = showString "\\\""
+      | c > '\DEL'  = showChar c
+      | otherwise   = GHC.Show.showLitChar c
 
 ppDecl q (_,id,typ)
   | id == identW = ppTerm q 3 typ
