@@ -476,7 +476,7 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 	PgfType pgfType = pgf_read_type(in, &unmarshaller);
 
 	if (pgfType == 0) {
-        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", in->text);
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "type cannot be parsed");
         return NULL;
     }
 

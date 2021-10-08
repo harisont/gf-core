@@ -9,6 +9,11 @@ public class Hypo {
 	/** The type for this hypothesis */
 	public native Type getType();
 
+	@Override
+    public boolean equals(Object o) {
+		return true; //
+	}
+
 	//////////////////////////////////////////////////////////////////
 	// private stuff
 
