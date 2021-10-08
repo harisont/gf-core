@@ -1,0 +1,35 @@
+4
+5
+\v0 -> Predef.length v0
+"ab"
+"cd"
+"d"
+"abc"
+"ABCD"
+"abcd"
+Predef.PFalse
+Predef.PTrue
+Predef.PFalse
+"no"
+"yes"
+"no"
+Predef.PTrue
+Predef.PTrue
+Predef.PFalse
+Predef.PTrue
+Predef.PTrue
+Predef.PFalse
+Predef.PTrue
+Predef.PFalse
+Predef.PTrue
+5
+user error
+"x" ++ Predef.nonExist ++ "y"
+"x" ++ Predef.BIND ++ "y"
+"x" ++ Predef.SOFT_BIND ++ "y"
+"x" ++ Predef.SOFT_SPACE ++ "y"
+"x" ++ Predef.CAPIT ++ "y"
+"x" ++ Predef.ALL_CAPIT ++ "y"
+"ab"
+\v0 -> v0 + "b"
+Predef.PTrue
