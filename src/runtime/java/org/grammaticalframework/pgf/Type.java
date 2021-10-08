@@ -17,6 +17,14 @@ public class Type {
 	
 	public native static Type readType(String s);
 
+	@Override
+    public boolean equals(Object o) {
+        if (o == this) return true; // same object
+        if (!(o instanceof Type)) return false;
+		Type t = (Type)o;
+        return this.hypos.equals(t.hypos) && this.cat.equals(t.cat) && this.exprs.equals(t.exprs);
+	}
+
 	//////////////////////////////////////////////////////////////////
 	// private stuff
 

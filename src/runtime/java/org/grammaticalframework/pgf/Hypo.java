@@ -11,7 +11,10 @@ public class Hypo {
 
 	@Override
     public boolean equals(Object o) {
-		return true; //
+		if (o == this) return true; // same object
+        if (!(o instanceof Hypo)) return false;
+		Hypo h = (Hypo)o;
+        return this.bindType == h.bindType && this.var.equals(h.var) && this.type.equals(h.type);
 	}
 
 	//////////////////////////////////////////////////////////////////
