@@ -1,5 +1,4 @@
 #include <pgf/pgf.h>
-#include <pgf/linearizer.h>
 #include <math.h>
 #include <jni.h>
 #include "jni_utils.h"

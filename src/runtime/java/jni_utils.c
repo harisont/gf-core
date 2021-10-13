@@ -2,7 +2,6 @@
 #include <gu/utf8.h>
 #include <gu/string.h>
 #include <pgf/pgf.h>
-#include <pgf/linearizer.h>
 #include "jni_utils.h"
 #ifndef __MINGW32__
 #include <alloca.h>
