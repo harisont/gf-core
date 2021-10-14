@@ -64,3 +64,22 @@ jobs:
       run: |
         npm ci
         npm run test
+
+    - name: Setup Java
+    - run: |
+        apt-get install --yes --no-install-recommends default-jre
+        apt-get install --yes --no-install-recommends default-jdk
+        apt-get install --yes --no-install-recommends junit4
+  
+    - name: Install Java bindings
+      working-directory: ./src/runtime/java
+      run: |
+        make
+        make install
+    
+    - name: Compile and run Java testsuite
+      working-directory: ./src/runtime/java
+      run: 
+        | javac -cp .:/usr/share/java/junit4.jar TestBasic.java
+          java -Djava.library.path=/usr/local/lib -cp .:/usr/share/java/junit4.jar org.junit.runner.JUnitCore TestBasic
+
