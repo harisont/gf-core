@@ -257,23 +257,16 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2Ljava_lang_Stri
 	long rev = 0;
 	PgfExn err;
 
-	// get C-style abstract name and file path strings
-	const char *aname = (*env)->GetStringUTFChars(env, n, 0);
+	// get C-style file path string
 	const char *fpath = (*env)->GetStringUTFChars(env, p, 0);
 
-	// get name length
-	jsize s = strlen(aname);
-
 	// build PGFText out of abstract name string 
-	PgfText *anamePGF = (PgfText*)malloc(sizeof(PgfText));
-	memcpy(anamePGF->text, aname, s);
-	anamePGF->size = s;
+	PgfText *anamePGF = jstring2pgf_text(env,n);
 
 	// create new NGF
 	PgfDB* db = pgf_new_ngf(anamePGF, fpath, &rev, &err);
 
 	// release C-style file path string
-	(*env)->ReleaseStringUTFChars(env, n, aname);
 	(*env)->ReleaseStringUTFChars(env, p, fpath);
 
 	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
@@ -294,22 +287,11 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2(JNIEnv *env, j
 	long rev = 0;
 	PgfExn err;
 
-	// get C-style abstract name and file path strings
-	const char *aname = (*env)->GetStringUTFChars(env, n, 0);
-
-	// get name length
-	jsize s = strlen(aname);
-
 	// build PGFText out of abstract name string 
-	PgfText *anamePGF = (PgfText*)malloc(sizeof(PgfText));
-	memcpy(anamePGF->text, aname, s);
-	anamePGF->size = s;
+	PgfText *anamePGF = jstring2pgf_text(env,n);
 
 	// create new NGF
 	PgfDB* db = pgf_new_ngf(anamePGF, NULL, &rev, &err);
-
-	// release C-style file path string
-	(*env)->ReleaseStringUTFChars(env, n, aname);
 
 	if (handleError(env,err) == PGF_EXN_NONE) { // no errors: return the PGF object
 		jmethodID constrId = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
