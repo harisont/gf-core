@@ -76,12 +76,12 @@ pgf_text2jstring(JNIEnv *env, PgfText *s)
 JPGF_INTERNAL PgfText* 
 jstring2pgf_text(JNIEnv *env, jstring s)
 {
-	const char* text = (*env)->GetStringUTFChars(env, s, 0);
-	jsize size = (*env)->GetStringUTFLength(env, s);
-	PgfText *pgfText = (PgfText*)malloc(sizeof(PgfText));
+	const char* text = (*env)->GetStringChars(env, s, 0);
+	jsize size = (*env)->GetStringLength(env, s);
+	PgfText *pgfText = (PgfText*)malloc(sizeof(PgfText)+size+1);
 	memcpy(pgfText->text, text, size);
 	pgfText->size = (size_t)size;
-	(*env)->ReleaseStringUTFChars(env, s, text);
+	(*env)->ReleaseStringChars(env, s, text);
 	return pgfText;
 }
 
