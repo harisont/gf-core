@@ -280,23 +280,23 @@ public class TestBasic {
     assertEquals(Type.readType("A"), Type.readType("A"));
   }
 
-  //@Test
-  //public void readType_EqualityWithWhitespace() {
-  //  assertEquals(Type.readType("A -> B"), Type.readType("A->B"));
-  //}
+  @Test
+  public void readType_EqualityWithWhitespace() {
+    assertEquals(Type.readType("A -> B"), Type.readType("A->B"));
+  }
 
-  //@Test
-  //public void readType_EqualityWithMoreWhitespace() {
-  //  assertEquals(Type.readType("A -> B -> C"), Type.readType("A->B   ->   C"));
-  //}
+  @Test
+  public void readType_EqualityWithMoreWhitespace() {
+    assertEquals(Type.readType("A -> B -> C"), Type.readType("A->B   ->   C"));
+  }
 
   @Test
   public void readType_Inequality() {
     assertNotEquals(Type.readType("A"), Type.readType("B"));
   }
 
-  //@Test
-  //public void readType_InequalityWithWhitespace() {
-  //  assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
-  //}
+  @Test
+  public void readType_InequalityWithWhitespace() {
+    assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
+  }
 }
