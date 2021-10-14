@@ -3,13 +3,19 @@
 -- | Functions for computing the values of terms in the concrete syntax, in
 -- | preparation for PMCFG generation.
 module GF.Compile.Compute.Concrete
-           (normalForm,
-            Value(..), Env, value2term, eval
+           ( normalForm
+           , Value(..), Thunk, ThunkState(..), Env
+           , EvalM, runEvalM, evalError
+           , eval, apply, force, value2term, patternMatch
+           , newMeta,getMeta,setMeta
+           , newThunk,newEvaluatedThunk
+           , getResDef, getInfo, getAllParamValues
            ) where
+
 import Prelude hiding ((<>)) -- GHC 8.4.1 clash with Text.PrettyPrint
 
 import GF.Grammar hiding (Env, VGen, VApp, VRecType)
-import GF.Grammar.Lookup(lookupResDef,allParamValues)
+import GF.Grammar.Lookup(lookupResDef,lookupOrigInfo,allParamValues)
 import GF.Grammar.Predef
 import GF.Grammar.Lockfield(lockLabel)
 import GF.Grammar.Printer
@@ -28,11 +34,12 @@ import Control.Applicative
 import qualified Control.Monad.Fail as Fail
 import qualified Data.Map as Map
 import GF.Text.Pretty
+import PGF2.Transactions(LIndex)
 
 -- * Main entry points
 
-normalForm :: Grammar -> L Ident -> Term -> Check Term
-normalForm gr loc t =
+normalForm :: Grammar -> Term -> Check Term
+normalForm gr t =
   fmap mkFV (runEvalM gr (eval [] t [] >>= value2term 0))
   where
     mkFV [t] = t
@@ -42,7 +49,7 @@ normalForm gr loc t =
 data ThunkState s
   = Unevaluated (Env s) Term
   | Evaluated (Value s)
-  | Unbound {-# UNPACK #-} !MetaId
+  | Unbound (Maybe Type) {-# UNPACK #-} !MetaId
 
 type Thunk s = STRef s (ThunkState s)
 type Env s = [(Ident,Thunk s)]
@@ -59,7 +66,7 @@ data Value s
   | VP (Value s) Label [Thunk s]
   | VExtR (Value s) (Value s)
   | VTable (Value s) (Value s)
-  | VT TInfo [Case]
+  | VT TInfo (Env s) [Case]
   | VV Type [Thunk s]
   | VS (Value s) (Thunk s) [Thunk s]
   | VSort Ident
@@ -72,6 +79,9 @@ data Value s
   | VPattType (Value s)
   | VAlts (Value s) [(Value s, Value s)]
   | VStrs [Value s]
+    -- This last constructor is only generated internally
+    -- in the PMCFG generator.
+  | VSymCat Int LIndex [(LIndex, Thunk s)]
 
 
 eval env (Vr x)         vs  = case lookup x env of
@@ -86,7 +96,7 @@ eval env (App t1 t2)    vs  = do tnk <- newThunk env t2
                                  eval env t1 (tnk : vs)
 eval env (Abs b x t)    []  = return (VClosure env (Abs b x t))
 eval env (Abs b x t) (v:vs) = eval ((x,v):env) t vs
-eval env (Meta i)       vs  = do tnk <- newMeta i
+eval env (Meta i)       vs  = do tnk <- newMeta Nothing i
                                  return (VMeta tnk env vs)
 eval env (ImplArg t)    []  = eval env t []
 eval env (Prod b x t1 t2)[] = do v1 <- eval env t1 []
@@ -112,19 +122,19 @@ eval env (ExtR t1 t2)   []  = do v1 <- eval env t1 []
 eval env (Table t1 t2)  []  = do v1 <- eval env t1 []
                                  v2 <- eval env t2 []
                                  return (VTable v1 v2)
-eval env (T i cs)       []  = return (VT i cs)
+eval env (T i cs)       []  = return (VT i env cs)
 eval env (V ty ts)      []  = do tnks <- mapM (newThunk env) ts
                                  return (VV ty tnks)
 eval env t@(S t1 t2)    vs  = do v1   <- eval env t1 []
                                  tnk2 <- newThunk env t2
                                  let v0 = VS v1 tnk2 vs
                                  case v1 of
-                                   VT _  cs   -> patternMatch v0 (map (\(p,t) -> (env,[p],tnk2:vs,t)) cs)
-                                   VV ty tnks -> do t2 <- force tnk2 [] >>= value2term (length env)
-                                                    ts <- getAllParamValues ty
-                                                    case lookup t2 (zip ts tnks) of
-                                                      Just tnk -> force tnk vs
-                                                      Nothing  -> return v0
+                                   VT _  env cs -> patternMatch v0 (map (\(p,t) -> (env,[p],tnk2:vs,t)) cs)
+                                   VV ty tnks   -> do t2 <- force tnk2 [] >>= value2term (length env)
+                                                      ts <- getAllParamValues ty
+                                                      case lookup t2 (zip ts tnks) of
+                                                        Just tnk -> force tnk vs
+                                                        Nothing  -> return v0
                                    v1      -> return v0
 eval env (Let (x,(_,t1)) t2) vs = do tnk <- newThunk env t1
                                      eval ((x,tnk):env) t2 vs
@@ -134,7 +144,7 @@ eval env (Q q@(m,id))   vs
                                  case mb_res of
                                    Just res -> return res
                                    Nothing  -> return (VApp q vs)
-  | otherwise               = do t <- lookupGlobal q
+  | otherwise               = do t <- getResDef q
                                  eval env t vs
 eval env (QC q)         vs  = return (VApp q vs)
 eval env (C t1 t2)      []  = do v1 <- eval env t1 []
@@ -173,13 +183,21 @@ eval env (Alts d as)    []  = do vd <- eval env d []
                                  return (VAlts vd vas)
 eval env (Strs ts)      []  = do vs <- mapM (\t -> eval env t []) ts
                                  return (VStrs vs)
+eval env (TSymCat d r rs) []= do rs <- forM rs $ \(i,pv) ->
+                                         case lookup pv env of
+                                           Just tnk -> return (i,tnk)
+                                           Nothing  -> evalError ("Variable" <+> pp pv <+> "is not in scope")
+                                 return (VSymCat d r rs)
 eval env t              vs  = evalError ("Cannot reduce term" <+> pp t)
 
-apply v                             []  = return v
+apply (VMeta m env vs0)             vs  = do st <- getMeta m
+                                             case st of
+                                               Evaluated v -> apply v vs
+                                               Unbound _ _ -> return (VMeta m env (vs0++vs))
 apply (VApp f  vs0)                 vs  = return (VApp f (vs0++vs))
-apply (VMeta m env vs0)             vs  = return (VMeta m env (vs0++vs))
 apply (VGen i  vs0)                 vs  = return (VGen i (vs0++vs))
 apply (VClosure env (Abs b x t)) (v:vs) = eval ((x,v):env) t vs
+apply v                             []  = return v
 
 evalPredef id [v]
   | id == cLength = return (fmap VInt (liftM genericLength (value2string v)))
@@ -238,13 +256,14 @@ update lbl v (a@(lbl',_):as)
   | lbl==lbl'                = (lbl,v) : as
   | otherwise                = a : update lbl v as
 
+
 patternMatch v0 []                      = fail "No matching pattern found"
 patternMatch v0 ((env0,ps,args0,t):eqs) = match env0 ps eqs args0
   where
     match env []              eqs      args  = eval env t args
     match env (PT ty p   :ps) eqs      args  = match env (p:ps) eqs args
     match env (PAlt p1 p2:ps) eqs      args  = match env (p1:ps) ((env,p2:ps,args,t):eqs) args
-    match env (PM q      :ps) eqs      args  = do t <- lookupGlobal q
+    match env (PM q      :ps) eqs      args  = do t <- getResDef q
                                                   case t of
                                                     EPatt _ _ p -> match env (p:ps) eqs args
                                                     _ -> evalError $ hang "Expected pattern macro:" 4
@@ -322,6 +341,10 @@ value2term i (VMeta m env tnks) = do
   case res of
     Right i -> foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (Meta i) tnks
     Left  v -> value2term i v
+value2term i (VSusp j env vs k) = do
+  tnk <- newEvaluatedThunk (VGen maxBound vs)
+  v <- k tnk
+  value2term i v
 value2term i (VGen j tnks) =
   foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (Vr (identS ('v':show j))) tnks
 value2term i (VClosure env (Abs b x t)) = do
@@ -329,12 +352,16 @@ value2term i (VClosure env (Abs b x t)) = do
   v <- eval ((x,tnk):env) t []
   t <- value2term (i+1) v
   return (Abs b (identS ('v':show i)) t)
-value2term i (VProd b x v1 env t2) = do
-  t1 <- value2term i v1
-  tnk <- newGen i
-  v2 <- eval ((x,tnk):env) t2 []
-  t2 <- value2term (i+1) v2
-  return (Prod b x t1 t2)
+value2term i (VProd b x v1 env t2)
+  | x == identW = do t1 <- value2term i v1
+                     v2 <- eval env t2 []
+                     t2 <- value2term i v2
+                     return (Prod b x t1 t2)
+  | otherwise   = do t1 <- value2term i v1
+                     tnk <- newGen i
+                     v2 <- eval ((x,tnk):env) t2 []
+                     t2 <- value2term (i+1) v2
+                     return (Prod b (identS ('v':show i)) t1 t2)
 value2term i (VRecType lbls) = do
   lbls <- mapM (\(lbl,v) -> fmap ((,) lbl) (value2term i v)) lbls
   return (RecType lbls)
@@ -352,7 +379,7 @@ value2term i (VTable v1 v2) = do
   t1 <- value2term i v1
   t2 <- value2term i v2
   return (Table t1 t2)
-value2term i (VT ti cs) = return (T ti cs)
+value2term i (VT ti _ cs) = return (T ti cs)
 value2term i (VV ty tnks) = do ts <- mapM (\tnk -> force tnk [] >>= value2term i) tnks
                                return (V ty ts)
 value2term i (VS v1 tnk2 tnks) = do t1 <- value2term i v1
@@ -384,6 +411,7 @@ value2term i (VAlts vd vas) = do
 value2term i (VStrs vs) = do
   ts <- mapM (value2term i) vs
   return (Strs ts)
+
 value2string (VStr s) = Just s
 value2string (VC vs)  = fmap unwords (mapM value2string vs)
 value2string _        = Nothing
@@ -442,10 +470,16 @@ runEvalM gr f =
 evalError :: Doc -> EvalM s a
 evalError msg = EvalM (\gr k _ r -> return (Fail msg))
   
-lookupGlobal :: QIdent -> EvalM s Term
-lookupGlobal q = EvalM $ \gr k mt r -> do
+getResDef :: QIdent -> EvalM s Term
+getResDef q = EvalM $ \gr k mt r -> do
   case lookupResDef gr q of
     Ok t    -> k t mt r
+    Bad msg -> return (Fail (pp msg))
+
+getInfo :: QIdent -> EvalM s (ModuleName,Info)
+getInfo q = EvalM $ \gr k mt r -> do
+  case lookupOrigInfo gr q of
+    Ok res  -> k res mt r
     Bad msg -> return (Fail (pp msg))
 
 getAllParamValues :: Type -> EvalM s [Term]
@@ -462,14 +496,23 @@ newEvaluatedThunk v = EvalM $ \gr k mt r -> do
  tnk <- newSTRef (Evaluated v)
  k tnk mt r
 
-newMeta i = EvalM $ \gr k mt r ->
+newMeta mb_ty i = EvalM $ \gr k mt r ->
   if i == 0
-    then do tnk <- newSTRef (Unbound i)
+    then do tnk <- newSTRef (Unbound mb_ty i)
             k tnk mt r
     else case Map.lookup i mt of
            Just tnk -> k tnk mt r
-           Nothing  -> do tnk <- newSTRef (Unbound i)
+           Nothing  -> do tnk <- newSTRef (Unbound mb_ty i)
                           k tnk (Map.insert i tnk mt) r
+
+getMeta tnk    = EvalM $ \gr k mt r -> readSTRef tnk >>= \st -> k st mt r
+
+setMeta tnk st = EvalM $ \gr k mt r -> do
+  old <- readSTRef tnk
+  writeSTRef tnk st
+  r <- k () mt r
+  writeSTRef tnk old
+  return r
 
 newGen i = EvalM $ \gr k mt r -> do
  tnk <- newSTRef (Evaluated (VGen i []))
@@ -485,10 +528,11 @@ force tnk vs = EvalM $ \gr k mt r -> do
                                                           return r) mt r
     Evaluated v       -> case apply v vs of
                            EvalM f -> f gr k mt r
+    Unbound _ _       -> k (VMeta tnk [] vs) mt r
 
 zonk tnk vs = EvalM $ \gr k mt r -> do
   s <- readSTRef tnk
   case s of
     Evaluated v -> case apply v vs of
                      EvalM f -> f gr (k . Left) mt r
-    Unbound i   -> k (Right i) mt r
+    Unbound _ i -> k (Right i) mt r

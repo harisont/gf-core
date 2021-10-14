@@ -24,8 +24,8 @@ module GF.Grammar.Printer
            ) where
 import Prelude hiding ((<>)) -- GHC 8.4.1 clash with Text.PrettyPrint
 
-import PGF2 as PGF2
-import PGF2.Internal as PGF2
+import PGF2(Literal(..))
+import PGF2.Transactions(LIndex,LParam,Symbol(..))
 import GF.Infra.Ident
 import GF.Infra.Option
 import GF.Grammar.Values
@@ -46,11 +46,10 @@ instance Pretty Grammar where
   pp = vcat . map (ppModule Qualified) . modules
 
 ppModule :: TermPrintQual -> SourceModule -> Doc
-ppModule q (mn, ModInfo mtype mstat opts exts with opens _ _ mseqs jments) =
+ppModule q (mn, ModInfo mtype mstat opts exts with opens _ _ jments) =
     hdr $$
     nest 2 (ppOptions opts $$
-            vcat (map (ppJudgement q) (Map.toList jments)) $$
-            maybe empty (ppSequences q) mseqs) $$
+            vcat (map (ppJudgement q) (Map.toList jments))) $$
     ftr
     where
       hdr = complModDoc <+> modTypeDoc <+> '=' <+>
@@ -109,10 +108,10 @@ ppJudgement q (id, ResParam pparams _) =
   (case pparams of
      Just (L _ ps) -> '=' <+> ppParams q ps
      _             -> empty) <+> ';'
-ppJudgement q (id, ResValue pvalue) =
+ppJudgement q (id, ResValue pvalue idx) =
   "-- param constructor" <+> id <+> ':' <+>
   (case pvalue of
-     (L _ ty) -> ppTerm q 0 ty) <+> ';'
+     (L _ ty) -> ppTerm q 0 ty) <+> ';' <+> parens (pp "index = " <> pp idx)
 ppJudgement q (id, ResOper  ptype pexp) =
   "oper" <+> id <+>
   (case ptype of {Just (L _ t) -> ':'  <+> ppTerm q 0 t; Nothing -> empty} $$
@@ -122,8 +121,8 @@ ppJudgement q (id, ResOverload ids defs) =
   ("overload" <+> '{' $$
    nest 2 (vcat [id <+> (':' <+> ppTerm q 0 ty $$ '=' <+> ppTerm q 0 e <+> ';') | (L _ ty,L _ e) <- defs]) $$
    '}') <+> ';'
-ppJudgement q (id, CncCat pcat pdef pref pprn mpmcfg) =
-  (case pcat of
+ppJudgement q (id, CncCat mtyp pdef pref pprn mpmcfg) =
+  (case mtyp of
      Just (L _ typ) -> "lincat" <+> id <+> '=' <+> ppTerm q 0 typ <+> ';'
      Nothing        -> empty) $$
   (case pdef of
@@ -135,17 +134,13 @@ ppJudgement q (id, CncCat pcat pdef pref pprn mpmcfg) =
   (case pprn of
      Just (L _ prn) -> "printname" <+> id <+> '=' <+> ppTerm q 0 prn <+> ';'
      Nothing        -> empty) $$
-  (case (mpmcfg,q) of
-     (Just (PMCFG prods funs),Internal)
-                    -> "pmcfg" <+> id <+> '=' <+> '{' $$
-                       nest 2 (vcat (map ppProduction prods) $$
-                               ' ' $$
-                               vcat (map (\(funid,arr) -> ppFunId funid <+> ":=" <+>
-                                                          parens (hcat (punctuate ',' (map ppSeqId (Array.elems arr)))))
-                                         (Array.assocs funs))) $$
+  (case (mtyp,mpmcfg,q) of
+     (Just (L _ typ),Just rules,Internal)
+                    -> "pmcfg" <+> '{' $$
+                       nest 2 (vcat (map (ppPmcfgRule id [] id) rules)) $$
                        '}'
      _              -> empty)
-ppJudgement q (id, CncFun  ptype pdef pprn mpmcfg) =
+ppJudgement q (id, CncFun mtyp pdef pprn mpmcfg) =
   (case pdef of
      Just (L _ e) -> let (xs,e') = getAbs e
                      in "lin" <+> id <+> hsep (map ppBind xs) <+> '=' <+> ppTerm q 0 e' <+> ';'
@@ -153,20 +148,23 @@ ppJudgement q (id, CncFun  ptype pdef pprn mpmcfg) =
   (case pprn of
      Just (L _ prn) -> "printname" <+> id <+> '=' <+> ppTerm q 0 prn <+> ';'
      Nothing        -> empty) $$
-  (case (mpmcfg,q) of
-     (Just (PMCFG prods funs),Internal)
-                    -> "pmcfg" <+> id <+> '=' <+> '{' $$
-                       nest 2 (vcat (map ppProduction prods) $$
-                               ' ' $$
-                               vcat (map (\(funid,arr) -> ppFunId funid <+> ":=" <+>
-                                                          parens (hcat (punctuate ',' (map ppSeqId (Array.elems arr)))))
-                                         (Array.assocs funs))) $$
+  (case (mtyp,mpmcfg,q) of
+     (Just (args,res,_,_),Just rules,Internal)
+                    -> "pmcfg" <+> '{' $$
+                       nest 2 (vcat (map (ppPmcfgRule id args res) rules)) $$
                        '}'
      _              -> empty)
 ppJudgement q (id, AnyInd cann mid) =
   case q of
     Internal -> "ind" <+> id <+> '=' <+> (if cann then pp "canonical" else empty) <+> mid <+> ';'
     _        -> empty
+
+ppPmcfgRule id arg_cats res_cat (PMCFGRule res args lins) =
+  pp id <+> (':' <+> hsep (intersperse (pp '*') (zipWith ppPmcfgCat arg_cats args)) <+> "->" <+> ppPmcfgCat res_cat res $$
+             '=' <+> brackets (vcat (map (hsep . map ppSymbol) lins)))
+
+ppPmcfgCat :: Ident -> PMCFGCat -> Doc
+ppPmcfgCat cat (PMCFGCat r rs) = pp cat <> parens (ppLinFun ppLParam r rs)
 
 instance Pretty Term where pp = ppTerm Unqualified 0
 
@@ -240,6 +238,7 @@ ppTerm q d (Typed e t) = '<' <> ppTerm q 0 e <+> ':' <+> ppTerm q 0 t <> '>'
 ppTerm q d (ImplArg e) = braces (ppTerm q 0 e)
 ppTerm q d (ELincat cat t) = prec d 4 ("lincat" <+> cat <+> ppTerm q 5 t)
 ppTerm q d (ELin cat t) = prec d 4 ("lin" <+> cat <+> ppTerm q 5 t)
+ppTerm q d (TSymCat i r rs) = pp '<' <> pp i <> pp ',' <> ppLinFun pp r rs <> pp '>'
 
 ppEquation q (ps,e) = hcat (map (ppPatt q 2) ps) <+> "->" <+> ppTerm q 0 e
 
@@ -330,18 +329,6 @@ ppAltern q (x,y) = ppTerm q 0 x <+> '/' <+> ppTerm q 0 y
 ppParams q ps = fsep (intersperse (pp '|') (map (ppParam q) ps))
 ppParam q (id,cxt) = id <+> hsep (map (ppDDecl q) cxt)
 
-ppProduction (Production fid funid args) =
-  ppFId fid <+> "->" <+> ppFunId funid <>
-  brackets (hcat (punctuate "," (map (hsep . intersperse (pp '|') . map ppFId) args)))
-
-ppSequences q seqsArr
-  | null seqs || q /= Internal = empty
-  | otherwise                  = "sequences" <+> '{' $$
-                                 nest 2 (vcat (map ppSeq seqs)) $$
-                                 '}'
-  where
-    seqs = Array.assocs seqsArr
-
 commaPunct f ds = (hcat (punctuate "," (map f ds)))
 
 prec d1 d2 doc
@@ -365,39 +352,40 @@ getLet (Let l e) = let (ls,e') = getLet e
                    in (l:ls,e')
 getLet e         = ([],e)
 
-ppFunId funid = pp 'F' <> pp funid
-ppSeqId seqid = pp 'S' <> pp seqid
-
-ppFId fid
-  | fid == PGF2.fidString = pp "CString"
-  | fid == PGF2.fidInt    = pp "CInt"
-  | fid == PGF2.fidFloat  = pp "CFloat"
-  | fid == PGF2.fidVar    = pp "CVar"
-  | fid == PGF2.fidStart  = pp "CStart"
-  | otherwise             = pp 'C' <> pp fid
-
 ppMeta :: Int -> Doc
 ppMeta n
   | n == 0    = pp '?'
   | otherwise = pp '?' <> pp n
 
-ppLit (PGF2.LStr s) = pp (show s)
-ppLit (PGF2.LInt n) = pp n
-ppLit (PGF2.LFlt d) = pp d
+ppLit (LStr s) = pp (show s)
+ppLit (LInt n) = pp n
+ppLit (LFlt d) = pp d
 
-ppSeq (seqid,seq) = 
-  ppSeqId seqid <+> pp ":=" <+> hsep (map ppSymbol seq)
+ppSymbol (SymCat d r rs)= pp '<' <> pp d <> pp ',' <> ppLinFun ppLParam r rs <> pp '>'
+ppSymbol (SymLit d r)   = pp '{' <> pp d <> pp ',' <> pp r <> pp '}'
+ppSymbol (SymVar d r)   = pp '<' <> pp d <> pp ',' <> pp '$' <> pp r <> pp '>'
+ppSymbol (SymKS t)      = doubleQuotes (pp t)
+ppSymbol SymNE          = pp "nonExist"
+ppSymbol SymBIND        = pp "BIND"
+ppSymbol SymSOFT_BIND   = pp "SOFT_BIND"
+ppSymbol SymSOFT_SPACE  = pp "SOFT_SPACE"
+ppSymbol SymCAPIT       = pp "CAPIT"
+ppSymbol SymALL_CAPIT   = pp "ALL_CAPIT"
+ppSymbol (SymKP syms alts) = pp "pre" <+> braces (hsep (punctuate (pp ';') (hsep (map ppSymbol syms) : map ppAlt alts)))
 
-ppSymbol (PGF2.SymCat d r) = pp '<' <> pp d <> pp ',' <> pp r <> pp '>'
-ppSymbol (PGF2.SymLit d r) = pp '{' <> pp d <> pp ',' <> pp r <> pp '}'
-ppSymbol (PGF2.SymVar d r) = pp '<' <> pp d <> pp ',' <> pp '$' <> pp r <> pp '>'
-ppSymbol (PGF2.SymKS t)    = doubleQuotes (pp t)
-ppSymbol PGF2.SymNE        = pp "nonExist"
-ppSymbol PGF2.SymBIND      = pp "BIND"
-ppSymbol PGF2.SymSOFT_BIND = pp "SOFT_BIND"
-ppSymbol PGF2.SymSOFT_SPACE= pp "SOFT_SPACE"
-ppSymbol PGF2.SymCAPIT     = pp "CAPIT"
-ppSymbol PGF2.SymALL_CAPIT = pp "ALL_CAPIT"
-ppSymbol (PGF2.SymKP syms alts) = pp "pre" <+> braces (hsep (punctuate (pp ';') (hsep (map ppSymbol syms) : map ppAlt alts)))
+ppLinFun ppParam r rs
+  | r == 0 && not (null rs) = hcat (intersperse (pp '+') (       map ppTerm rs))
+  | otherwise               = hcat (intersperse (pp '+') (pp r : map ppTerm rs))
+  where
+    ppTerm (i,p)
+      | i == 1    = ppParam p
+      | otherwise = pp i <> pp '*' <> ppParam p
+
+ppLParam p
+  | i == 0    = pp (chars !! j)
+  | otherwise = pp (chars !! j : show i)
+  where
+    chars = "ijklmnopqr"
+    (i,j) = p `divMod` (length chars)
 
 ppAlt (syms,ps) = hsep (map ppSymbol syms) <+> pp '/' <+> hsep (map (doubleQuotes . pp) ps)

@@ -78,7 +78,7 @@ extendModule cwd gr (name,m)
 -- | rebuilding instance + interface, and "with" modules, prior to renaming.
 -- AR 24/10/2003
 rebuildModule :: FilePath -> SourceGrammar -> SourceModule -> Check SourceModule
-rebuildModule cwd gr mo@(i,mi@(ModInfo mt stat fs_ me mw ops_ med_ msrc_ env_ js_)) =
+rebuildModule cwd gr mo@(i,mi@(ModInfo mt stat fs_ me mw ops_ med_ msrc_ js_)) =
   checkInModule cwd mi NoLoc empty $ do
 
 ----  deps <- moduleDeps ms
@@ -115,7 +115,7 @@ rebuildModule cwd gr mo@(i,mi@(ModInfo mt stat fs_ me mw ops_ med_ msrc_ env_ js
                     else MSIncomplete
       unless (stat' == MSComplete || stat == MSIncomplete)
              (checkError ("module" <+> i <+> "remains incomplete"))
-      ModInfo mt0 _ fs me' _ ops0 _ fpath _ js <- lookupModule gr ext
+      ModInfo mt0 _ fs me' _ ops0 _ fpath js <- lookupModule gr ext
       let ops1 = nub $
                    ops_ ++ -- N.B. js has been name-resolved already
                    [OQualif i j | (i,j) <- ops] ++
@@ -131,7 +131,7 @@ rebuildModule cwd gr mo@(i,mi@(ModInfo mt stat fs_ me mw ops_ med_ msrc_ env_ js
                                     js
       let js1 = Map.union js0 js_
       let med1= nub (ext : infs ++ insts ++ med_)
-      return $ ModInfo mt0 stat' fs1 me Nothing ops1 med1 msrc_ env_ js1
+      return $ ModInfo mt0 stat' fs1 me Nothing ops1 med1 msrc_ js1
 
   return (i,mi')
 
@@ -168,7 +168,7 @@ extendMod gr isCompl ((name,mi),cond) base new = foldM try new $ Map.toList (jme
     indirInfo :: ModuleName -> Info -> Info
     indirInfo n info = AnyInd b n' where
       (b,n') = case info of
-        ResValue _ -> (True,n)
+        ResValue _ _ -> (True,n)
         ResParam _ _ -> (True,n)
         AbsFun _ _ Nothing _ -> (True,n)
         AnyInd b k -> (b,k)
@@ -179,7 +179,7 @@ globalizeLoc fpath i =
     AbsCat mc             -> AbsCat (fmap gl mc)
     AbsFun mt ma md moper -> AbsFun (fmap gl mt) ma (fmap (fmap gl) md) moper
     ResParam mt mv        -> ResParam (fmap gl mt) mv
-    ResValue t            -> ResValue (gl t)
+    ResValue t i          -> ResValue (gl t) i
     ResOper mt m          -> ResOper (fmap gl mt) (fmap gl m)
     ResOverload ms os     -> ResOverload ms (map (\(x,y) -> (gl x,gl y)) os)
     CncCat mc md mr mp mpmcfg-> CncCat (fmap gl mc) (fmap gl md) (fmap gl mr) (fmap gl mp) mpmcfg
@@ -201,9 +201,9 @@ unifyAnyInfo m i j = case (i,j) of
 
   (ResParam mt1 mv1, ResParam mt2 mv2) ->
     liftM2 ResParam (unifyMaybeL mt1 mt2) (unifyMaybe mv1 mv2)
-  (ResValue (L l1 t1), ResValue (L l2 t2))
-      | t1==t2    -> return (ResValue (L l1 t1))
-      | otherwise -> fail ""
+  (ResValue (L l1 t1) i1, ResValue (L l2 t2) i2)
+      | t1==t2 && i1 == i2 -> return (ResValue (L l1 t1) i1)
+      | otherwise          -> fail ""
   (_, ResOverload ms t) | elem m ms ->
     return $ ResOverload ms t
   (ResOper mt1 m1, ResOper mt2 m2) ->

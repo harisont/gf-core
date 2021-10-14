@@ -2,6 +2,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <pthread.h>
 
 #include "data.h"
 
@@ -325,6 +327,7 @@ PgfDB::PgfDB(const char* filepath, int flags, int mode) {
     ms = (malloc_state*)
         mmap(NULL, file_size, PROT_READ | PROT_WRITE, mflags, fd, 0);
     if (ms == MAP_FAILED) {
+        ms = NULL; // mark that ms is not created.
         ::free((void *) this->filepath);
         int code = errno;
         close(fd);
@@ -589,7 +592,7 @@ object PgfDB::malloc_internal(size_t bytes)
            invoked all that often in most programs. And the programs that
            it is called frequently in otherwise tend to fragment.
         */
-   
+
         idx = largebin_index(nb);
         if (ms->have_fastchunks)
             malloc_consolidate(ms);
@@ -881,8 +884,16 @@ object PgfDB::malloc_internal(size_t bytes)
                     throw pgf_systemerror(errno, filepath);
             }
 
+// OSX mman and mman-win32 do not implement mremap or MREMAP_MAYMOVE
+#ifndef MREMAP_MAYMOVE
+            if (munmap(ms, old_size) == -1)
+                throw pgf_systemerror(errno);
+            malloc_state* new_ms =
+                (malloc_state*) mmap(0, new_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+#else
             malloc_state* new_ms =
                 (malloc_state*) mremap(ms, old_size, new_size, MREMAP_MAYMOVE);
+#endif
             if (new_ms == MAP_FAILED)
                 throw pgf_systemerror(errno);
 
