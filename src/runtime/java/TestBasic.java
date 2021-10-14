@@ -300,9 +300,4 @@ public class TestBasic {
   public void readType_InequalityWithWhitespace() {
     assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
   }
-
-  @Test
-  public void readType_ToString() {
-    assertEquals(Type.readType("A->   BÄ->C"), "A -> BÄ -> C");
-  }
 }

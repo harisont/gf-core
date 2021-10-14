@@ -1,6 +1,4 @@
 #include <jni.h>
-#include <gu/utf8.h>
-#include <gu/string.h>
 #include <pgf/pgf.h>
 #include "jni_utils.h"
 #ifndef __MINGW32__

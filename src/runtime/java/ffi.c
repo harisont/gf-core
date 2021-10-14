@@ -7,7 +7,6 @@
 #include <jni.h>
 #include "jni_utils.h"
 #include <pgf/pgf.h>
-#include "./ffi.h"
 
 PGF_API uint32_t
 pgf_utf8_decode(const uint8_t** src_inout)
