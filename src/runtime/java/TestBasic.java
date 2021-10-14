@@ -253,32 +253,32 @@ public class TestBasic {
 
   // types
 
-  //@Test 
-  //public void readType_OK() throws FileNotFoundException {
-  //  boolean thrown = false;
-  //  try {
-  //    Type.readType("S");
-  //  } catch (PGFError e) {
-  //    thrown = true;
-  //  }
-  //  assertFalse(thrown);
-  //}
+  @Test 
+  public void readType_OK() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      Type.readType("S");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertFalse(thrown);
+  }
 
-  //@Test
-  //public void readType_InvalidType() throws FileNotFoundException {
-  //  boolean thrown = false;
-  //  try {
-  //    Type.readType("->");
-  //  } catch (PGFError e) {
-  //    thrown = true;
-  //  }
-  //  assertTrue(thrown);
-  //}
+  @Test
+  public void readType_InvalidType() throws FileNotFoundException {
+    boolean thrown = false;
+    try {
+      Type.readType("->");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+    assertTrue(thrown);
+  }
 
-  //@Test
-  //public void readType_ExactEquality() {
-  //  assertEquals(Type.readType("A"), Type.readType("A"));
-  //}
+  @Test
+  public void readType_ExactEquality() {
+    assertEquals(Type.readType("A"), Type.readType("A"));
+  }
 
   //@Test
   //public void readType_EqualityWithWhitespace() {
@@ -290,10 +290,10 @@ public class TestBasic {
   //  assertEquals(Type.readType("A -> B -> C"), Type.readType("A->B   ->   C"));
   //}
 
-  //@Test
-  //public void readType_Inequality() {
-  //  assertNotEquals(Type.readType("A"), Type.readType("B"));
-  //}
+  @Test
+  public void readType_Inequality() {
+    assertNotEquals(Type.readType("A"), Type.readType("B"));
+  }
 
   //@Test
   //public void readType_InequalityWithWhitespace() {
