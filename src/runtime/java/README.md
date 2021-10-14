@@ -34,10 +34,10 @@ See: https://www.grammaticalframework.org/doc/runtime-api.html#java
 1. [Download `JUnit` and `hamcrest-core`'s `jar`s](https://github.com/junit-team/junit4/wiki/Download-and-Install) to the current folder 
 2. Compile with
    ```
-   javac -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar TestBasic.java
+   javac -cp .:junit-4.13.2.jar TestBasic.java
    ```
 3. Run with 
    ```
-   java -Djava.library.path=PATH_TO_LIBS -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar org.junit.runner.JUnitCore TestBasic
+   java -Djava.library.path=PATH_TO_LIBS -cp .:junit-4.13.2.jar org.junit.runner.JUnitCore TestBasic
    ```
    where PATH_TO_LIBS is the path where `make install` has put `jpgf` (see Installation step 2).
