@@ -67,9 +67,9 @@ jobs:
 
     - name: Setup Java
       run: |
-        apt-get install --yes --no-install-recommends default-jre
-        apt-get install --yes --no-install-recommends default-jdk
-        apt-get install --yes --no-install-recommends junit4
+        sudo apt-get install --yes --no-install-recommends default-jre
+        sudo apt-get install --yes --no-install-recommends default-jdk
+        sudo apt-get install --yes --no-install-recommends junit4
   
     - name: Install Java bindings
       working-directory: ./src/runtime/java
