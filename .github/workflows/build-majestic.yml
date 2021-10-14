@@ -73,6 +73,8 @@ jobs:
   
     - name: Install Java bindings
       working-directory: ./src/runtime/java
+      env:
+        LD_LIBRARY_PATH: /usr/local/lib
       run: |
         make
         make install
@@ -81,7 +83,7 @@ jobs:
       working-directory: ./src/runtime/java
       run: |
         javac -cp .:/usr/share/java/junit4.jar TestBasic.java
-        java -Djava.library.path=/usr/local/lib -cp .:/usr/share/java/junit4.jar org.junit.runner.JUnitCore TestBasic
+        java -Djava.library.path=$LD_LIBRARY_PATH -cp .:/usr/share/java/junit4.jar org.junit.runner.JUnitCore TestBasic
           
   macos:
     name: Build on macOS
