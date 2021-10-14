@@ -458,7 +458,7 @@ JNIEXPORT void JNICALL
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
 	jfieldID dbID = (*env)->GetFieldID(env, self , "db", "J");
-    jfieldID revID = (*env)->GetFieldID(env, self , "id", "J");
+    jfieldID revID = (*env)->GetFieldID(env, self , "rev", "J");
 	PgfDB* db = (PgfDB*)(*env)->GetObjectField(env,self,dbID);
 	jlong rev = (*env)->GetLongField(env,self,revID);
 	pgf_free_revision(db, rev);
