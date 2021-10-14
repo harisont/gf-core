@@ -409,19 +409,8 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject sel
 	if (!addId)
 		return NULL;
 
-	// get C-style abstract name and file path strings
-	const char *cname = (*env)->GetStringUTFChars(env, c, 0);
-
-	// get name length
-	jsize s = strlen(cname);
-
 	// build PGFText out of category name string 
-	PgfText *cnamePGF = (PgfText*)malloc(sizeof(PgfText));
-	memcpy(cnamePGF->text, cname, s);
-	cnamePGF->size = s;
-
-	// release C-style file path string
-	(*env)->ReleaseStringUTFChars(env, c, cname);
+	PgfText *cnamePGF = jstring2pgf_text(env,c);
 
 	JPGFClosure clo = { { pgf_collect_names }, env, self, functions, addId };
 	pgf_iter_functions_by_cat(get_db(env, self),(long)get_rev(env, self),cnamePGF,&clo.fn,&err);

@@ -230,26 +230,26 @@ public class TestBasic {
     assertEquals(Arrays.asList(funsArray), pgf.getFunctions());
   }
 
-  //@Test
-  //public void getFunctionsByCat_N() throws FileNotFoundException {
-  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-  //  String[] funsArray = {"s","z"};
-  //  assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("N"));
-  //}
+  @Test
+  public void getFunctionsByCat_N() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {"s","z"};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("N"));
+  }
 
-  //@Test
-  //public void getFunctionsByCat_S() throws FileNotFoundException {
-  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-  //  String[] funsArray = {"c"};
-  //  assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("S"));
-  //}
+  @Test
+  public void getFunctionsByCat_S() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {"c"};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("S"));
+  }
 
-  //@Test
-  //public void getFunctionsByCat_X() throws FileNotFoundException {
-  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-  //  String[] funsArray = {};
-  //  assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
-  //}
+  @Test
+  public void getFunctionsByCat_X() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
+  }
 
   // types
 
