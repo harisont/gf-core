@@ -24,7 +24,6 @@ public class TestBasic {
   }
   
   // readPGF
-
   @Test
   public void readPGF_OK() {
     boolean thrown = false;
@@ -183,31 +182,31 @@ public class TestBasic {
 
   // TODO: something like Python's test_readNGF
   
-  @Test
-  public void newNGF_File() throws FileAlreadyExistsException {
-    String path = "empty.ngf";
-    PGF pgf = PGF.newNGF("empty", path);
-    assertEquals(0, pgf.getCategories().size());
-    new File(path).delete();
-  }
+  //@Test
+  //public void newNGF_File() throws FileAlreadyExistsException {
+  //  String path = "empty.ngf";
+  //  PGF pgf = PGF.newNGF("empty", path);
+  //  assertEquals(0, pgf.getCategories().size());
+  //  new File(path).delete();
+  //}
+  
+  //@Test
+  //public void newNGF_Memory() {
+  //  PGF pgf = PGF.newNGF("empty");
+  //  assertEquals(0, pgf.getCategories().size());
+  //}
 
-  @Test
-  public void newNGF_Memory() {
-    PGF pgf = PGF.newNGF("empty");
-    assertEquals(0, pgf.getCategories().size());
-  }
-
-  @Test
-  public void newNGF_ExixtingFile() throws FileAlreadyExistsException, FileNotFoundException {
-    createBasicNGF();
-    boolean thrown = false;
-    try {
-      PGF.newNGF("basic","basic.ngf");
-    } catch (IOException e) {
-      thrown = true;
-    }
-    assertTrue(thrown);
-  }
+  //@Test
+  //public void newNGF_ExixtingFile() throws FileAlreadyExistsException, FileNotFoundException {
+  //  createBasicNGF();
+  //  boolean thrown = false;
+  //  try {
+  //    PGF.newNGF("basic","basic.ngf");
+  //  } catch (IOException e) {
+  //    thrown = true;
+  //  }
+  //  assertTrue(thrown);
+  //}
 
   // abstract syntax
 
@@ -231,73 +230,73 @@ public class TestBasic {
     assertEquals(Arrays.asList(funsArray), pgf.getFunctions());
   }
 
-  @Test
-  public void getFunctionsByCat_N() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {"s","z"};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("N"));
-  }
+  //@Test
+  //public void getFunctionsByCat_N() throws FileNotFoundException {
+  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+  //  String[] funsArray = {"s","z"};
+  //  assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("N"));
+  //}
 
-  @Test
-  public void getFunctionsByCat_S() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {"c"};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("S"));
-  }
+  //@Test
+  //public void getFunctionsByCat_S() throws FileNotFoundException {
+  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+  //  String[] funsArray = {"c"};
+  //  assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("S"));
+  //}
 
-  @Test
-  public void getFunctionsByCat_X() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
-  }
+  //@Test
+  //public void getFunctionsByCat_X() throws FileNotFoundException {
+  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+  //  String[] funsArray = {};
+  //  assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
+  //}
 
   // types
 
-  @Test 
-  public void readType_OK() throws FileNotFoundException {
-    boolean thrown = false;
-    try {
-      Type.readType("S");
-    } catch (PGFError e) {
-      thrown = true;
-    }
-    assertFalse(thrown);
-  }
+  //@Test 
+  //public void readType_OK() throws FileNotFoundException {
+  //  boolean thrown = false;
+  //  try {
+  //    Type.readType("S");
+  //  } catch (PGFError e) {
+  //    thrown = true;
+  //  }
+  //  assertFalse(thrown);
+  //}
 
-  @Test
-  public void readType_InvalidType() throws FileNotFoundException {
-    boolean thrown = false;
-    try {
-      Type.readType("->");
-    } catch (PGFError e) {
-      thrown = true;
-    }
-    assertTrue(thrown);
-  }
+  //@Test
+  //public void readType_InvalidType() throws FileNotFoundException {
+  //  boolean thrown = false;
+  //  try {
+  //    Type.readType("->");
+  //  } catch (PGFError e) {
+  //    thrown = true;
+  //  }
+  //  assertTrue(thrown);
+  //}
 
-  @Test
-  public void readType_ExactEquality() {
-    assertEquals(Type.readType("A"), Type.readType("A"));
-  }
+  //@Test
+  //public void readType_ExactEquality() {
+  //  assertEquals(Type.readType("A"), Type.readType("A"));
+  //}
 
-  @Test
-  public void readType_EqualityWithWhitespace() {
-    assertEquals(Type.readType("A -> B"), Type.readType("A->B"));
-  }
+  //@Test
+  //public void readType_EqualityWithWhitespace() {
+  //  assertEquals(Type.readType("A -> B"), Type.readType("A->B"));
+  //}
 
-  @Test
-  public void readType_EqualityWithMoreWhitespace() {
-    assertEquals(Type.readType("A -> B -> C"), Type.readType("A->B   ->   C"));
-  }
+  //@Test
+  //public void readType_EqualityWithMoreWhitespace() {
+  //  assertEquals(Type.readType("A -> B -> C"), Type.readType("A->B   ->   C"));
+  //}
 
-  @Test
-  public void readType_Inequality() {
-    assertNotEquals(Type.readType("A"), Type.readType("B"));
-  }
+  //@Test
+  //public void readType_Inequality() {
+  //  assertNotEquals(Type.readType("A"), Type.readType("B"));
+  //}
 
-  @Test
-  public void readType_InequalityWithWhitespace() {
-    assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
-  }
+  //@Test
+  //public void readType_InequalityWithWhitespace() {
+  //  assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
+  //}
 }
