@@ -70,6 +70,7 @@ jobs:
         sudo apt-get install --yes --no-install-recommends default-jre
         sudo apt-get install --yes --no-install-recommends default-jdk
         sudo apt-get install --yes --no-install-recommends junit4
+        sudo apt-get install --yes --no-install-recommends libtool-bin 
   
     - name: Install Java bindings
       working-directory: ./src/runtime/java
