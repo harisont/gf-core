@@ -62,7 +62,13 @@ public class PGF {
 
 	/** Returns a list of with all categories in the grammar */
 	public native List<String> getCategories();
-	// TODO: categoryContext
+	
+	/**
+	 * The given category's context. TODO: better explanation
+	 * @param cat The name of a category
+	 * @return The list of Hypos representing the category's context
+	 */
+	public native List<Hypo> categoryContext(String cat);
 
 	/** The name of the start category for the grammar. This is usually
 	 * specified with 'params startcat=&lt;cat&gt;'.

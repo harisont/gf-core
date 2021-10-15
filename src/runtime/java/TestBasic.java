@@ -3,6 +3,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -273,6 +274,31 @@ public class TestBasic {
     String[] funsArray = {};
     assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
   }
+
+  @Test
+  public void categoryContext_N() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    Hypo[] ctx = {};
+    assertEquals(Arrays.asList(ctx), pgf.categoryContext("N"));
+  }
+
+  @Test
+  public void categoryContext_S() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    Hypo[] ctx = {};
+    assertEquals(Arrays.asList(ctx), pgf.categoryContext("S"));
+  }
+
+  //@Test
+  //public void categoryContext_P() throws FileNotFoundException {
+  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+  //  List<Hypo> ctx = pgf.categoryContext("P");
+  //  assertEquals(1, ctx.size());
+  //  Hypo h = ctx.get(0);
+  //  assertEquals(true, h.getBindType());
+  //  assertEquals("_", h.getVar());
+  //  assertEquals(Type.readType("N"), h.getType());
+  //}
 
   // types
 

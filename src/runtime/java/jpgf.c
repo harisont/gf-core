@@ -103,8 +103,8 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 
 	for (int i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
-		jboolean bindType = (jboolean)hypos[i].bind_type; // will this cast work? lo scopriremo solo vivendo
-		jstring var = pgf_text2jstring(env,hypos[i].cid); // and does this function actually work?
+		jboolean bindType = (jboolean)hypos[i].bind_type; 
+		jstring var = pgf_text2jstring(env,hypos[i].cid);
 		jobject type = (jobject)hypos[i].type;
 
 		// construct Hypo object
@@ -435,6 +435,42 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject sel
 	}
 
 	return functions;
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self, jstring c)
+{	
+	PgfExn err;
+	PgfText *cname = jstring2pgf_text(env,c);
+	size_t n_hypos;
+	PgfTypeHypo *hypos = pgf_category_context(get_db(env, self),(long)get_rev(env, self), cname, &n_hypos, &unmarshaller, &err);
+	
+	if (handleError(env,err) != PGF_EXN_NONE || hypos == NULL) {
+        return NULL;
+    }
+
+	// copied from old runtime: create an empty list
+	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
+	if (!list_class)
+		return NULL;
+	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
+	if (!constrId)
+		return NULL;
+	jobject contexts = (*env)->NewObject(env, list_class, constrId);
+	if (!contexts)
+		return NULL;
+
+	// get id of the method to add to Java lists
+	jmethodID addId = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
+	if (!addId)
+		return NULL;
+
+	for (size_t i = 0; i < n_hypos; i++) {
+		(*env)->CallBooleanMethod(env, contexts, addId, hypos[i]);
+    }
+    free(hypos);
+
+    return contexts;
 }
 
 JNIEXPORT void JNICALL 
