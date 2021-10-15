@@ -183,10 +183,11 @@ public class TestBasic {
   @Test
   public void readNGF_BasicHasCategories() throws FileNotFoundException, FileAlreadyExistsException {
     createBasicNGF();
-    PGF pgf = PGF.readNGF("./basic.ngf");
+    PGF pgf = PGF.readNGF("basic.ngf");
     assertTrue(pgf.getCategories().size() > 0);
   }
 
+  // newNGF
   
   @Test
   public void newNGF_File() throws FileAlreadyExistsException {
@@ -212,6 +213,22 @@ public class TestBasic {
       thrown = true;
     }
     assertTrue(thrown);
+  }
+
+  // writePGF
+
+  @Test
+  public void writePGF_OK() throws FileNotFoundException {
+    boolean thrown = false;
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String path = "copy.pgf";
+    try {
+      pgf.writePGF(path);
+    } catch (Exception e) {
+      thrown = true;
+    }
+    new File(path).delete();
+    assertFalse(thrown);
   }
 
   // abstract syntax

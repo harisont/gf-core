@@ -48,7 +48,12 @@ public class PGF {
 	 */
 	public static native PGF newNGF(String abstractName);
 
-	// TODO: writePGF
+	/**
+	 * Write pgf to the given path.
+	 * @param path The path the grammar will be stored at.
+	 */
+	public native void writePGF(String path)
+	throws FileAlreadyExistsException;
 
 	// ABSTRACT SYNTAX
 

@@ -304,6 +304,18 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2(JNIEnv *env, j
 	}
 }
 
+JNIEXPORT void JNICALL
+Java_org_grammaticalframework_pgf_PGF_writePGF(JNIEnv* env, jobject self, jstring p)
+{
+	PgfExn err;
+
+	// get C-style file path string
+	const char *fpath = (*env)->GetStringUTFChars(env, p, 0);
+
+	pgf_write_pgf(fpath, get_db(env, self),(long)get_rev(env, self), &err);
+    handleError(env,err);
+}
+
 JNIEXPORT jstring JNICALL 
 Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 {
