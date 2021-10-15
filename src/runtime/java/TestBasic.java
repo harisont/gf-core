@@ -180,7 +180,13 @@ public class TestBasic {
     assertTrue(thrown);
   }
 
-  // TODO: something like Python's test_readNGF
+  @Test
+  public void readNGF_BasicHasCategories() throws FileNotFoundException, FileAlreadyExistsException {
+    createBasicNGF();
+    PGF pgf = PGF.readNGF("./basic.ngf");
+    assertTrue(pgf.getCategories().size() > 0);
+  }
+
   
   @Test
   public void newNGF_File() throws FileAlreadyExistsException {
