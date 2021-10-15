@@ -111,6 +111,7 @@ jobs:
     needs: ubuntu-runtime
 
     steps:
+    - uses: actions/checkout@v2
     - name: Setup Java
       run: | 
         sudo apt-get install --yes --no-install-recommends default-jre
