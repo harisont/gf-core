@@ -105,6 +105,30 @@ jobs:
       run: |
         npm run test
 
+  ubuntu-java:
+    name: Java (Ubuntu)
+    runs-on: ubuntu-20.04
+    needs: ubuntu-runtime
+
+    steps:
+    - name: Setup Java
+      run: | 
+        sudo apt-get install --yes --no-install-recommends default-jre
+        sudo apt-get install --yes --no-install-recommends default-jdk
+        sudo apt-get install --yes --no-install-recommends junit4
+        sudo apt-get install --yes --no-install-recommends libtool-bin 
+    - name: Install bindings
+      working-directory: ./src/runtime/java
+      run: |
+        make
+        sudo make install
+    - name: Compile and run testsuite
+      working-directory: ./src/runtime/java
+      run: |
+        javac -cp .:/usr/share/java/junit4.jar TestBasic.java
+        java -Djava.library.path=$LD_LIBRARY_PATH -cp .:/usr/share/java/junit4.jar org.junit.runner.JUnitCore TestBasic
+    
+
 # ----------------------------------------------------------------------------
 
   macos-runtime:
