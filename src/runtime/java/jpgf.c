@@ -103,7 +103,7 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 
 	for (int i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
-		jboolean bindType = (jboolean)hypos[i].bind_type; 
+		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
 		jstring var = pgf_text2jstring(env,hypos[i].cid);
 		jobject type = (jobject)hypos[i].type;
 
@@ -472,7 +472,7 @@ Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self,
 
 	for (size_t i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
-		jboolean bindType = (jboolean)hypos[i].bind_type; 
+		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
 		jstring var = pgf_text2jstring(env,hypos[i].cid);
 		jobject type = (jobject)hypos[i].type;
 
