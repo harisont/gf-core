@@ -1,13 +1,19 @@
 package org.grammaticalframework.pgf;
 
 public class Hypo {
-	public native boolean getBindType();
+	public boolean getBindType() {
+		return this.bindType;
+	}
 	
 	/** The name of the bound variable or '_' if there is none */
-	public native String getVar();
+	public String getVar() {
+		return this.var;
+	};
 	
 	/** The type for this hypothesis */
-	public native Type getType();
+	public Type getType() {
+		return this.type;
+	}
 
 	@Override
     public boolean equals(Object o) {
