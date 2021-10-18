@@ -289,16 +289,16 @@ public class TestBasic {
     assertEquals(Arrays.asList(ctx), pgf.categoryContext("S"));
   }
 
-  //@Test
-  //public void categoryContext_P() throws FileNotFoundException {
-  //  PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-  //  List<Hypo> ctx = pgf.categoryContext("P");
-  //  assertEquals(1, ctx.size());
-  //  Hypo h = ctx.get(0);
-  //  assertEquals(true, h.getBindType());
-  //  assertEquals("_", h.getVar());
-  //  assertEquals(Type.readType("N"), h.getType());
-  //}
+  @Test
+  public void categoryContext_P() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    List<Hypo> ctx = pgf.categoryContext("P");
+    assertEquals(1, ctx.size());
+    Hypo h = ctx.get(0);
+    assertEquals(true, h.getBindType());
+    assertEquals("_", h.getVar());
+    assertEquals(Type.readType("N"), h.getType());
+  }
 
   // types
 
