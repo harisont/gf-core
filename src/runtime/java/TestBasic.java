@@ -348,4 +348,10 @@ public class TestBasic {
   public void readType_InequalityWithWhitespace() {
     assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
   }
+
+  @Test
+  public void getStartCat_OK() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(Type.readType("S"), pgf.getStartCat());
+  }
 }

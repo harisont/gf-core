@@ -514,6 +514,23 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 	return (jobject)pgfType;
 }
 
+JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
+{
+	PgfExn err;
+    PgfType type = pgf_start_cat(get_db(env, self),(long)get_rev(env, self), &unmarshaller, &err);
+
+    if (type == 0) {
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "start category cannot be found");
+        return NULL;
+    }
+    else if (handleError(env,err) != PGF_EXN_NONE) {
+        return NULL;
+    }
+
+    return (jobject)type;
+}
+
 
 /*
 typedef struct {
@@ -619,16 +636,6 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_io_InputStream_2(JNIEnv *en
 */
 
 /*
-
-JNIEXPORT jstring JNICALL
-Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
-{
-	GuPool* tmp_pool = gu_local_pool();
-	PgfType* type = pgf_start_cat(get_ref(env, self), tmp_pool);
-	jstring jcat = gu2j_string(env, type->cid);
-	gu_pool_free(tmp_pool);
-	return jcat;
-}
 
 JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self, jstring jid)

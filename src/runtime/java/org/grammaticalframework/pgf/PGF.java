@@ -73,7 +73,7 @@ public class PGF {
 	/** The name of the start category for the grammar. This is usually
 	 * specified with 'params startcat=&lt;cat&gt;'.
 	 */
-	// TODO: public native String getStartCat();
+	public native Type getStartCat();
 
 	/** Returns a list with the names of all functions in the grammar. */
 	public native List<String> getFunctions();
