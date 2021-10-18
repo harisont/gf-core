@@ -465,8 +465,21 @@ Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self,
 	if (!addId)
 		return NULL;
 
+	// get constructor id of Hypo class
+	jclass hClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
+	jmethodID hConstr = (*env)->GetMethodID(env, hClass, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
+
+
 	for (size_t i = 0; i < n_hypos; i++) {
-		(*env)->CallBooleanMethod(env, contexts, addId, hypos[i]);
+		// get bindType, var and type from current Hypo
+		jboolean bindType = (jboolean)hypos[i].bind_type; 
+		jstring var = pgf_text2jstring(env,hypos[i].cid);
+		jobject type = (jobject)hypos[i].type;
+
+		// construct Hypo object
+		jobject hObj = (*env)->NewObject(env, hClass, hConstr, bindType, var, type);
+
+		(*env)->CallBooleanMethod(env, contexts, addId, hObj);
     }
     free(hypos);
 
