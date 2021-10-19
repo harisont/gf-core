@@ -1,9 +1,11 @@
-#include <pgf/pgf.h>
-#include <math.h>
-#include <jni.h>
-#include "jni_utils.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include <pgf/pgf.h>
+
+#include <jni.h>
+#include "jni_utils.h"
+
 
 static JavaVM* cachedJVM;
 static JNIEnv *env;

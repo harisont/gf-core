@@ -1,13 +1,12 @@
 #include <stdlib.h>
-#include <jni.h>
+#include <alloca.h>
 #include <string.h>
 
 #include <pgf/pgf.h>
+
+#include <jni.h>
 #include "jni_utils.h"
-#ifndef __MINGW32__
-#include <alloca.h>
-#else
-#endif
+
 
 #define l2p(x) ((void*) (intptr_t) (x))
 #define p2l(x) ((jlong) (intptr_t) (x))
