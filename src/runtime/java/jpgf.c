@@ -171,6 +171,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
     return JNI_VERSION_1_6;
 }
 
+///////// methods
+
+/* PGF */
+
 JNIEXPORT jobject JNICALL 
 Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring s)
 { 	
@@ -367,6 +371,72 @@ Java_org_grammaticalframework_pgf_PGF_getCategories(JNIEnv* env, jobject self)
 }
 
 JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self, jstring c)
+{	
+	PgfExn err;
+	PgfText *cname = jstring2pgf_text(env,c);
+	size_t n_hypos;
+	PgfTypeHypo *hypos = pgf_category_context(get_db(env, self),(long)get_rev(env, self), cname, &n_hypos, &unmarshaller, &err);
+	
+	if (handleError(env,err) != PGF_EXN_NONE || hypos == NULL) {
+        return NULL;
+    }
+
+	// copied from old runtime: create an empty list
+	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
+	if (!list_class)
+		return NULL;
+	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
+	if (!constrId)
+		return NULL;
+	jobject contexts = (*env)->NewObject(env, list_class, constrId);
+	if (!contexts)
+		return NULL;
+
+	// get id of the method to add to Java lists
+	jmethodID addId = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
+	if (!addId)
+		return NULL;
+
+	// get constructor id of Hypo class
+	jclass hClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
+	jmethodID hConstr = (*env)->GetMethodID(env, hClass, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
+
+
+	for (size_t i = 0; i < n_hypos; i++) {
+		// get bindType, var and type from current Hypo
+		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
+		jstring var = pgf_text2jstring(env,hypos[i].cid);
+		jobject type = (jobject)hypos[i].type;
+
+		// construct Hypo object
+		jobject hObj = (*env)->NewObject(env, hClass, hConstr, bindType, var, type);
+
+		(*env)->CallBooleanMethod(env, contexts, addId, hObj);
+    }
+    free(hypos);
+
+    return contexts;
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
+{
+	PgfExn err;
+    PgfType type = pgf_start_cat(get_db(env, self),(long)get_rev(env, self), &unmarshaller, &err);
+
+    if (type == 0) {
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "start category cannot be found");
+        return NULL;
+    }
+    else if (handleError(env,err) != PGF_EXN_NONE) {
+        return NULL;
+    }
+
+    return (jobject)type;
+}
+
+JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_getFunctions(JNIEnv* env, jobject self)
 {	
 	PgfExn err;
@@ -450,55 +520,6 @@ Java_org_grammaticalframework_pgf_PGF_functionIsConstructor(JNIEnv* env, jobject
     return isConstr == 0 ? JNI_FALSE : JNI_TRUE;
 }
 
-JNIEXPORT jobject JNICALL
-Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self, jstring c)
-{	
-	PgfExn err;
-	PgfText *cname = jstring2pgf_text(env,c);
-	size_t n_hypos;
-	PgfTypeHypo *hypos = pgf_category_context(get_db(env, self),(long)get_rev(env, self), cname, &n_hypos, &unmarshaller, &err);
-	
-	if (handleError(env,err) != PGF_EXN_NONE || hypos == NULL) {
-        return NULL;
-    }
-
-	// copied from old runtime: create an empty list
-	jclass list_class = (*env)->FindClass(env, "java/util/ArrayList");
-	if (!list_class)
-		return NULL;
-	jmethodID constrId = (*env)->GetMethodID(env, list_class, "<init>", "()V");
-	if (!constrId)
-		return NULL;
-	jobject contexts = (*env)->NewObject(env, list_class, constrId);
-	if (!contexts)
-		return NULL;
-
-	// get id of the method to add to Java lists
-	jmethodID addId = (*env)->GetMethodID(env, list_class, "add", "(Ljava/lang/Object;)Z");
-	if (!addId)
-		return NULL;
-
-	// get constructor id of Hypo class
-	jclass hClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
-	jmethodID hConstr = (*env)->GetMethodID(env, hClass, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
-
-
-	for (size_t i = 0; i < n_hypos; i++) {
-		// get bindType, var and type from current Hypo
-		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
-		jstring var = pgf_text2jstring(env,hypos[i].cid);
-		jobject type = (jobject)hypos[i].type;
-
-		// construct Hypo object
-		jobject hObj = (*env)->NewObject(env, hClass, hConstr, bindType, var, type);
-
-		(*env)->CallBooleanMethod(env, contexts, addId, hObj);
-    }
-    free(hypos);
-
-    return contexts;
-}
-
 JNIEXPORT void JNICALL 
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
@@ -509,7 +530,7 @@ Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 	pgf_free_revision(db, rev);
 }
 
-// types
+/* Type */
 
 JNIEXPORT jobject JNICALL 
 Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring s)
@@ -525,23 +546,6 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
     }
 
 	return (jobject)pgfType;
-}
-
-JNIEXPORT jobject JNICALL
-Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
-{
-	PgfExn err;
-    PgfType type = pgf_start_cat(get_db(env, self),(long)get_rev(env, self), &unmarshaller, &err);
-
-    if (type == 0) {
-        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "start category cannot be found");
-        return NULL;
-    }
-    else if (handleError(env,err) != PGF_EXN_NONE) {
-        return NULL;
-    }
-
-    return (jobject)type;
 }
 
 

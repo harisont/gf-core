@@ -24,7 +24,10 @@ public class TestBasic {
         PGF.bootNGF("../haskell/tests/basic.pgf", ngfPath);
   }
   
+  /* PGF */
+  
   // readPGF
+
   @Test
   public void readPGF_OK() {
     boolean thrown = false;
@@ -232,13 +235,15 @@ public class TestBasic {
     assertFalse(thrown);
   }
 
-  // abstract syntax
+  // getAbstractName
 
   @Test
   public void getAbstractName_OK() throws FileNotFoundException {
     PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
     assertEquals("basic", pgf.getAbstractName()); 
   }
+
+  // getCategories
 
   @Test
   public void getCategories_OK() throws FileNotFoundException {
@@ -247,33 +252,7 @@ public class TestBasic {
     assertEquals(Arrays.asList(catsArray), pgf.getCategories());
   }
 
-  @Test
-  public void getFunctions_OK() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {"c","ind","s","z"};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctions());
-  }
-
-  @Test
-  public void getFunctionsByCat_N() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {"s","z"};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("N"));
-  }
-
-  @Test
-  public void getFunctionsByCat_S() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {"c"};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("S"));
-  }
-
-  @Test
-  public void getFunctionsByCat_X() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    String[] funsArray = {};
-    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
-  }
+  // categoryContext
 
   @Test
   public void categoryContext_N() throws FileNotFoundException {
@@ -300,7 +279,75 @@ public class TestBasic {
     assertEquals(Type.readType("N"), h.getType());
   }
 
-  // types
+  // getStartCat
+
+  @Test
+  public void getStartCat_OK() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(Type.readType("S"), pgf.getStartCat());
+  }
+
+  // getFunctions
+
+  @Test
+  public void getFunctions_OK() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {"c","ind","s","z"};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctions());
+  }
+
+  // getFunctionsByCat
+
+  @Test
+  public void getFunctionsByCat_N() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {"s","z"};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("N"));
+  }
+
+  @Test
+  public void getFunctionsByCat_S() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {"c"};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("S"));
+  }
+
+  @Test
+  public void getFunctionsByCat_X() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    String[] funsArray = {};
+    assertEquals(Arrays.asList(funsArray), pgf.getFunctionsByCat("X"));
+  }
+
+  // functionIsConstructor
+
+  @Test
+  public void functionIsConstructor_s() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(true, pgf.functionIsConstructor("s"));
+  }
+
+  @Test
+  public void functionIsConstructor_z() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(true, pgf.functionIsConstructor("z"));
+  }
+
+  @Test
+  public void functionIsConstructor_c() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(true, pgf.functionIsConstructor("c"));
+  }
+
+  @Test
+  public void functionIsConstructor_ind() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(false, pgf.functionIsConstructor("ind"));
+  }
+
+  /* Type */
+
+  // readType
 
   @Test 
   public void readType_OK() throws FileNotFoundException {
@@ -347,35 +394,5 @@ public class TestBasic {
   @Test
   public void readType_InequalityWithWhitespace() {
     assertNotEquals(Type.readType("A -> B"), Type.readType("B->B"));
-  }
-
-  @Test
-  public void getStartCat_OK() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    assertEquals(Type.readType("S"), pgf.getStartCat());
-  }
-
-  @Test
-  public void functionIsConstructor_s() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    assertEquals(true, pgf.functionIsConstructor("s"));
-  }
-
-  @Test
-  public void functionIsConstructor_z() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    assertEquals(true, pgf.functionIsConstructor("z"));
-  }
-
-  @Test
-  public void functionIsConstructor_c() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    assertEquals(true, pgf.functionIsConstructor("c"));
-  }
-
-  @Test
-  public void functionIsConstructor_ind() throws FileNotFoundException {
-    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
-    assertEquals(false, pgf.functionIsConstructor("ind"));
   }
 }
