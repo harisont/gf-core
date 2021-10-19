@@ -82,7 +82,10 @@ public class PGF {
 	 * @param cat The name of the return category. */
 	public native List<String> getFunctionsByCat(String cat);
 
-	// TODO: functionIsConstructor
+	/** Returns true if the given function name is that of a constructor,
+	 * false otherwise
+	 */
+	public native boolean functionIsConstructor(String f);
 
 	// TYPES
 

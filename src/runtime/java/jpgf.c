@@ -437,6 +437,19 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject sel
 	return functions;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_org_grammaticalframework_pgf_PGF_functionIsConstructor(JNIEnv* env, jobject self, jstring f)
+{
+	PgfExn err;
+	PgfText *fname = jstring2pgf_text(env, f);
+
+	int isConstr = pgf_function_is_constructor(get_db(env, self),(long)get_rev(env, self), fname, &err);
+
+	handleError(env, err);
+
+    return isConstr == 0 ? JNI_FALSE : JNI_TRUE;
+}
+
 JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self, jstring c)
 {	

@@ -354,4 +354,28 @@ public class TestBasic {
     PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
     assertEquals(Type.readType("S"), pgf.getStartCat());
   }
+
+  @Test
+  public void functionIsConstructor_s() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(true, pgf.functionIsConstructor("s"));
+  }
+
+  @Test
+  public void functionIsConstructor_z() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(true, pgf.functionIsConstructor("z"));
+  }
+
+  @Test
+  public void functionIsConstructor_c() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(true, pgf.functionIsConstructor("c"));
+  }
+
+  @Test
+  public void functionIsConstructor_ind() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(false, pgf.functionIsConstructor("ind"));
+  }
 }
