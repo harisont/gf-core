@@ -14,6 +14,30 @@
 
 /* Error handling */
 
+JPGF_INTERNAL void
+throw_jstring_exception(JNIEnv *env, const char* class_name, jstring msg)
+{
+	jclass exception_class = (*env)->FindClass(env, class_name);
+	if (!exception_class)
+		return;
+	jmethodID constrId = (*env)->GetMethodID(env, exception_class, "<init>", "(Ljava/lang/String;)V");
+	if (!constrId)
+		return;
+	jobject exception = (*env)->NewObject(env, exception_class, constrId, msg);
+	if (!exception)
+		return;
+	(*env)->Throw(env, exception);
+}
+
+JPGF_INTERNAL void
+throw_string_exception(JNIEnv *env, const char* class_name, const char* msg)
+{
+	jstring jmsg = (*env)->NewStringUTF(env, msg);
+	if (!jmsg)
+		return;
+	throw_jstring_exception(env, class_name, jmsg);
+}
+
 JPGF_INTERNAL PgfExnType 
 handleError(JNIEnv *env, PgfExn err)
 {
@@ -88,40 +112,3 @@ jstring2pgftext(JNIEnv *env, jstring s)
 	(*env)->ReleaseStringUTFChars(env, s, text);
 	return pgfText;
 }
-
-JPGF_INTERNAL void*
-get_db(JNIEnv *env, jobject self) {
-	jfieldID dbId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "db", "J");
-	return l2p((*env)->GetLongField(env, self, dbId));
-}
-
-JPGF_INTERNAL void*
-get_rev(JNIEnv *env, jobject self) {
-	jfieldID revId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "rev", "J");
-	return l2p((*env)->GetLongField(env, self, revId));
-}
-
-JPGF_INTERNAL void
-throw_jstring_exception(JNIEnv *env, const char* class_name, jstring msg)
-{
-	jclass exception_class = (*env)->FindClass(env, class_name);
-	if (!exception_class)
-		return;
-	jmethodID constrId = (*env)->GetMethodID(env, exception_class, "<init>", "(Ljava/lang/String;)V");
-	if (!constrId)
-		return;
-	jobject exception = (*env)->NewObject(env, exception_class, constrId, msg);
-	if (!exception)
-		return;
-	(*env)->Throw(env, exception);
-}
-
-JPGF_INTERNAL void
-throw_string_exception(JNIEnv *env, const char* class_name, const char* msg)
-{
-	jstring jmsg = (*env)->NewStringUTF(env, msg);
-	if (!jmsg)
-		return;
-	throw_jstring_exception(env, class_name, jmsg);
-}
-

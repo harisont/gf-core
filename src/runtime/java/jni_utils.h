@@ -19,6 +19,12 @@
 
 /* Error handling */
 
+JPGF_INTERNAL_DECL void
+throw_jstring_exception(JNIEnv *env, const char* class_name, jstring msg);
+
+JPGF_INTERNAL_DECL void
+throw_string_exception(JNIEnv *env, const char* class_name, const char* msg);
+
 JPGF_INTERNAL_DECL PgfExnType 
 handleError(JNIEnv *env, PgfExn err);
 
@@ -32,19 +38,5 @@ pgftext2jstring(JNIEnv *env, PgfText* s);
 
 JPGF_INTERNAL_DECL PgfText* 
 jstring2pgftext(JNIEnv *env, jstring s);
-
-
-
-JPGF_INTERNAL_DECL void*
-get_db(JNIEnv *env, jobject self);
-
-JPGF_INTERNAL_DECL void*
-get_rev(JNIEnv *env, jobject self);
-
-JPGF_INTERNAL_DECL void
-throw_jstring_exception(JNIEnv *env, const char* class_name, jstring msg);
-
-JPGF_INTERNAL_DECL void
-throw_string_exception(JNIEnv *env, const char* class_name, const char* msg);
 
 #endif

@@ -174,6 +174,20 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
 
 /* PGF */
 
+// PGF "getters"
+
+JPGF_INTERNAL void*
+get_db(JNIEnv *env, jobject self) {
+	jfieldID dbId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "db", "J");
+	return l2p((*env)->GetLongField(env, self, dbId));
+}
+
+JPGF_INTERNAL void*
+get_rev(JNIEnv *env, jobject self) {
+	jfieldID revId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "rev", "J");
+	return l2p((*env)->GetLongField(env, self, revId));
+}
+
 JNIEXPORT jobject JNICALL 
 Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring s)
 { 	
