@@ -4,7 +4,6 @@
 #include "jni_utils.h"
 #include <stdlib.h>
 #include <string.h>
-#include "./ffi.h"
 
 static JavaVM* cachedJVM;
 static JNIEnv *env;
@@ -104,7 +103,7 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 	for (int i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
 		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
-		jstring var = pgf_text2jstring(env,hypos[i].cid);
+		jstring var = pgftext2jstring(env,hypos[i].cid);
 		jobject type = (jobject)hypos[i].type;
 
 		// construct Hypo object
@@ -115,7 +114,7 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 	}
 
 	// get cat as jstring
-	jstring cString = pgf_text2jstring(env,cat); 
+	jstring cString = pgftext2jstring(env,cat); 
 
 	jobject lExprs = (*env)->NewObject(env, lClass, lConstr);
 	// TODO: fill it with Exprs
@@ -160,7 +159,7 @@ pgf_collect_names(PgfItor* fn, PgfText* key, void* value, PgfExn* err)
 	PgfText *name = key;
     JPGFClosure* clo = (JPGFClosure*) fn;
 
-	jstring jname = pgf_text2jstring(clo->env, name);
+	jstring jname = pgftext2jstring(clo->env, name);
 
 	(*clo->env)->CallBooleanMethod(clo->env, clo->object, clo->method_id, jname);
 }
@@ -265,7 +264,7 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2Ljava_lang_Stri
 	const char *fpath = (*env)->GetStringUTFChars(env, p, 0);
 
 	// build PGFText out of abstract name string 
-	PgfText *anamePGF = jstring2pgf_text(env,n);
+	PgfText *anamePGF = jstring2pgftext(env,n);
 
 	// create new NGF
 	PgfDB* db = pgf_new_ngf(anamePGF, fpath, &rev, &err);
@@ -292,7 +291,7 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2(JNIEnv *env, j
 	PgfExn err;
 
 	// build PGFText out of abstract name string 
-	PgfText *anamePGF = jstring2pgf_text(env,n);
+	PgfText *anamePGF = jstring2pgftext(env,n);
 
 	// create new NGF
 	PgfDB* db = pgf_new_ngf(anamePGF, NULL, &rev, &err);
@@ -333,7 +332,7 @@ Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 		(*env)->CallVoidMethod(env, cls, finalizeId);
 		return NULL;
 	}
-	return pgf_text2jstring(env, txt);
+	return pgftext2jstring(env, txt);
 }
 
 JNIEXPORT jobject JNICALL
@@ -374,7 +373,7 @@ JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self, jstring c)
 {	
 	PgfExn err;
-	PgfText *cname = jstring2pgf_text(env,c);
+	PgfText *cname = jstring2pgftext(env,c);
 	size_t n_hypos;
 	PgfTypeHypo *hypos = pgf_category_context(get_db(env, self),(long)get_rev(env, self), cname, &n_hypos, &unmarshaller, &err);
 	
@@ -406,7 +405,7 @@ Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self,
 	for (size_t i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
 		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
-		jstring var = pgf_text2jstring(env,hypos[i].cid);
+		jstring var = pgftext2jstring(env,hypos[i].cid);
 		jobject type = (jobject)hypos[i].type;
 
 		// construct Hypo object
@@ -492,7 +491,7 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionsByCat(JNIEnv* env, jobject sel
 		return NULL;
 
 	// build PGFText out of category name string 
-	PgfText *cnamePGF = jstring2pgf_text(env,c);
+	PgfText *cnamePGF = jstring2pgftext(env,c);
 
 	JPGFClosure clo = { { pgf_collect_names }, env, self, functions, addId };
 	pgf_iter_functions_by_cat(get_db(env, self),(long)get_rev(env, self),cnamePGF,&clo.fn,&err);
@@ -511,7 +510,7 @@ JNIEXPORT jboolean JNICALL
 Java_org_grammaticalframework_pgf_PGF_functionIsConstructor(JNIEnv* env, jobject self, jstring f)
 {
 	PgfExn err;
-	PgfText *fname = jstring2pgf_text(env, f);
+	PgfText *fname = jstring2pgftext(env, f);
 
 	int isConstr = pgf_function_is_constructor(get_db(env, self),(long)get_rev(env, self), fname, &err);
 
@@ -536,7 +535,7 @@ JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring s)
 {
 
-	PgfText* in = jstring2pgf_text(env, s);
+	PgfText* in = jstring2pgftext(env, s);
 
 	PgfType pgfType = pgf_read_type(in, &unmarshaller);
 

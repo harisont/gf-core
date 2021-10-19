@@ -1,6 +1,6 @@
 INSTALL_PATH = /usr/local
 
-C_SOURCES = jpgf.c jni_utils.c ffi.c
+C_SOURCES = jpgf.c jni_utils.c
 JAVA_SOURCES = $(wildcard org/grammaticalframework/pgf/*.java)
 
 JNI_INCLUDES = $(if $(wildcard /usr/lib/jvm/default-java/include/.*), -I/usr/lib/jvm/default-java/include -I/usr/lib/jvm/default-java/include/linux, \
