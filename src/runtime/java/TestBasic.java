@@ -202,7 +202,7 @@ public class TestBasic {
   }
   
   @Test
-  public void newNGF_Memory() {
+  public void newNGF_Memory() throws FileAlreadyExistsException {
     PGF pgf = PGF.newNGF("empty");
     assertEquals(0, pgf.getCategories().size());
   }

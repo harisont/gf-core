@@ -8,12 +8,12 @@ import java.util.*;
 public class PGF {
 	/** Reads a grammar in PGF format.
 	 * @param path The path to the PGF file.
-	 * @return a PGF object representing the grammar in memory. */
+	 * @return A PGF object representing the grammar in memory. */
 	public static native PGF readPGF(String path) throws FileNotFoundException;
 
 	/** Reads a grammar from an input stream.
 	 * @param stream The stream from which to read the grammar
-	 * @return an object representing the grammar in memory. */
+	 * @return An object representing the grammar in memory. */
 	// TODO: (?) public static native PGF readPGF(InputStream stream);
 
 	/** Reads a grammar in PGF format and stores the unpacked data in a 
@@ -21,12 +21,12 @@ public class PGF {
 	 * or used for quick re-start.
 	 * @param pgfPath The path to the PGF file.
 	 * @param ngfPath The desired path for the new NGF file
-	 * @return a PGF object representing the grammar in memory. */
+	 * @return A PGF object representing the grammar in memory. */
 	public static native PGF bootNGF(String pgfPath, String ngfPath) throws FileNotFoundException, FileAlreadyExistsException;
 
 	/** Reads a grammar in NGF format. 
 	 * @param path The path to the NGF file.
-	 * @return a PGF object representing the grammar in memory.*/
+	 * @return A PGF object representing the grammar in memory.*/
 	public static native PGF readNGF(String path) throws FileNotFoundException;
 
 	/**
@@ -34,7 +34,7 @@ public class PGF {
 	 * on disk at the given path.
 	 * @param abstractName The name of the empty grammar to create.
 	 * @param path The path the grammar will be stored at.
-	 * @return
+	 * @return A PGF object representing the grammar in memory.
 	 */
 	public static native PGF newNGF(String abstractName, String path) throws FileAlreadyExistsException;
 
@@ -42,9 +42,11 @@ public class PGF {
 	 * Creates an empty grammar with the given abstract name, storing it only
 	 * in memory.
 	 * @param abstractName The name of the empty grammar to create.
-	 * @return
+	 * @return A PGF object representing the grammar in memory.
 	 */
-	public static native PGF newNGF(String abstractName);
+	public static PGF newNGF(String abstractName) throws FileAlreadyExistsException {
+		return newNGF(abstractName, null);
+	}
 
 	/**
 	 * Write pgf to the given path.

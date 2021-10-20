@@ -255,30 +255,20 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2Ljava_lang_Stri
 {
 	long rev = 0;
 	PgfExn err;
+	const char *fpath;
+	
+	if (p != NULL) {
+		fpath = (*env)->GetStringUTFChars(env, p, 0);
+	} else {
+		fpath = NULL;
+	}
 
-	const char *fpath = (*env)->GetStringUTFChars(env, p, 0);
 	PgfText *anamePGF = jstring2pgftext(env,n);
 	PgfDB* db = pgf_new_ngf(anamePGF, fpath, &rev, &err);
-	(*env)->ReleaseStringUTFChars(env, p, fpath);
 
-	if (handleError(env,err) == PGF_EXN_NONE) {
-		jmethodID cid = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
-		return (*env)->NewObject(env, cls, cid, db, rev);
-	} else {
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
-		return NULL;
+	if (p != NULL) {
+		(*env)->ReleaseStringUTFChars(env, p, fpath);
 	}
-}
-
-JNIEXPORT jobject JNICALL 
-Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2(JNIEnv *env, jclass cls, jstring n)
-{
-	long rev = 0;
-	PgfExn err;
-
-	PgfText *anamePGF = jstring2pgftext(env,n);
-	PgfDB* db = pgf_new_ngf(anamePGF, NULL, &rev, &err);
 
 	if (handleError(env,err) == PGF_EXN_NONE) {
 		jmethodID cid = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
