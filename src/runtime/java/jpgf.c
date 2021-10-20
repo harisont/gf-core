@@ -91,43 +91,16 @@ dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n
 {	
 	JNIEnv *env;
     (*cachedJVM)->AttachCurrentThread(cachedJVM, (void **)&env, NULL);
-	jclass lClass = (*env)->FindClass(env, "java/util/ArrayList");
-	jmethodID lConstr = (*env)->GetMethodID(env, lClass, "<init>", "()V");
-	jobject lHypos = (*env)->NewObject(env, lClass, lConstr);
 
-	// get id of the method to add elements to such list
-	jmethodID lAdd = (*env)->GetMethodID(env, lClass, "add", "(Ljava/lang/Object;)Z");
+	jobject jhypos = pgf_type_hypos2j_hypo_list(env, n_hypos, hypos);
+	jstring cname = pgftext2jstring(env, cat); 
+	jobject jexprs = new_jlist(env); // TODO: fill it with Exprs
 
-	// get constructor id of Hypo class
-	jclass hcls = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
-	jmethodID hConstr = (*env)->GetMethodID(env, hcls, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
+	jclass tcls = (*env)->FindClass(env, "org/grammaticalframework/pgf/Type");
+	jmethodID cid = (*env)->GetMethodID(env, tcls, "<init>", "([Lorg/grammaticalframework/pgf/Hypo;Ljava/lang/String;[Lorg/grammaticalframework/pgf/Expr;)V");
+	jobject t = (*env)->NewObject(env, tcls, cid, jhypos, cname, jexprs);
 
-	for (int i = 0; i < n_hypos; i++) {
-		// get bindType, var and type from current Hypo
-		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
-		jstring var = pgftext2jstring(env,hypos[i].cid);
-		jobject type = (jobject)hypos[i].type;
-
-		// construct Hypo object
-		jobject hObj = (*env)->NewObject(env, hcls, hConstr, bindType, var, type);
-
-		// add it to the list of Hypos
-		(*env)->CallBooleanMethod(env, lHypos, lAdd, hObj);
-	}
-
-	// get cat as jstring
-	jstring cString = pgftext2jstring(env,cat); 
-
-	jobject lExprs = (*env)->NewObject(env, lClass, lConstr);
-	// TODO: fill it with Exprs
-
-	// construct a Java Type object
-	jclass tClass = (*env)->FindClass(env, "org/grammaticalframework/pgf/Type");
-	jmethodID tConstr = (*env)->GetMethodID(env, tClass, "<init>", "([Lorg/grammaticalframework/pgf/Hypo;Ljava/lang/String;[Lorg/grammaticalframework/pgf/Expr;)V");
-	jobject type = (*env)->NewObject(env, tClass, tConstr, lHypos, cString, lExprs);
-
-	// return it casted to PgfType 
-	return (PgfType) type ;
+	return (PgfType)t ;
 }
 
 static void
@@ -342,21 +315,7 @@ Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self,
         return NULL;
     }
 
-	jobject ctxs = new_jlist(env);
-	jmethodID add_id = get_jlist_add_method(env);
-
-	jclass hcls = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
-	jmethodID hConstr = (*env)->GetMethodID(env, hcls, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
-
-	for (size_t i = 0; i < n_hypos; i++) {
-		// get bindType, var and type from current Hypo
-		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
-		jstring var = pgftext2jstring(env,hypos[i].cid);
-		jobject type = (jobject)hypos[i].type;
-
-		jobject hObj = (*env)->NewObject(env, hcls, hConstr, bindType, var, type);
-		(*env)->CallBooleanMethod(env, ctxs, add_id, hObj);
-    }
+	jobject ctxs = pgf_type_hypos2j_hypo_list(env, n_hypos, hypos);
 
 	for (size_t i = 0; i < n_hypos; i++) {
         free(hypos[i].cid);
@@ -371,9 +330,9 @@ JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
 {
 	PgfExn err;
-    PgfType type = pgf_start_cat(get_db(env, self),(long)get_rev(env, self), &unmarshaller, &err);
+    PgfType t = pgf_start_cat(get_db(env, self),(long)get_rev(env, self), &unmarshaller, &err);
 
-    if (type == 0) {
+    if (t == 0) {
         throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "start category cannot be found");
         return NULL;
     }
@@ -381,7 +340,7 @@ Java_org_grammaticalframework_pgf_PGF_getStartCat(JNIEnv* env, jobject self)
         return NULL;
     }
 
-    return (jobject)type;
+    return (jobject)t;
 }
 
 JNIEXPORT jobject JNICALL
@@ -508,7 +467,7 @@ jpgf_jstream_end_buffer(GuInStream* self, size_t consumed, GuExn* err)
 static GuInStream*
 jpgf_new_java_stream(JNIEnv* env, jobject java_stream, GuPool* pool)
 {
-	jclass java_stream_class = (*env)->GetObjectClass(env, java_stream);
+	jclass java_stream_class = (*env)->GetObjectcls(env, java_stream);
 
 	JInStream* jstream = gu_new(JInStream, pool);
 	jstream->stream.begin_buffer = jpgf_jstream_begin_buffer;
@@ -718,11 +677,11 @@ jpgf_literal_callback_match(PgfLiteralCallback* self, PgfConcr* concr,
 	if (result == NULL)
 		return NULL;
 
-	jclass result_class = (*env)->GetObjectClass(env, result);
+	jclass result_class = (*env)->GetObjectcls(env, result);
 	
 	jfieldID epId = (*env)->GetFieldID(env, result_class, "ep", "Lorg/grammaticalframework/pgf/ExprProb;");
 	jobject jep = (*env)->GetObjectField(env, result, epId);
-	jclass ep_class = (*env)->GetObjectClass(env, jep);
+	jclass ep_class = (*env)->GetObjectcls(env, jep);
 	jfieldID exprId = (*env)->GetFieldID(env, ep_class, "expr", "Lorg/grammaticalframework/pgf/Expr;");
 	jobject jexpr = (*env)->GetObjectField(env, jep, exprId);
 	jfieldID probId = (*env)->GetFieldID(env, ep_class, "prob", "D");
@@ -799,7 +758,7 @@ JNIEXPORT void JNICALL Java_org_grammaticalframework_pgf_Parser_addLiteralCallba
 	callback->jcallback = (*env)->NewGlobalRef(env, jcallback);
 	callback->fin.fn = jpgf_literal_callback_fin;
 
-	jclass callback_class = (*env)->GetObjectClass(env, jcallback);
+	jclass callback_class = (*env)->GetObjectcls(env, jcallback);
 	callback->match_methodId = (*env)->GetMethodID(env, callback_class, "match", "(Ljava/lang/String;I)Lorg/grammaticalframework/pgf/LiteralCallback$CallbackResult;");
 	callback->predict_methodId = (*env)->GetMethodID(env, callback_class, "predict", "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Iterator;");
 
@@ -864,7 +823,7 @@ Java_org_grammaticalframework_pgf_Parser_parseWithHeuristics
 		return NULL;
 	}
 
-	jfieldID refId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, jconcr), "gr", "Lorg/grammaticalframework/pgf/PGF;");
+	jfieldID refId = (*env)->GetFieldID(env, (*env)->GetObjectcls(env, jconcr), "gr", "Lorg/grammaticalframework/pgf/PGF;");
 	jobject jpgf = (*env)->GetObjectField(env, jconcr, refId);
 
 	jclass expiter_class = (*env)->FindClass(env, "org/grammaticalframework/pgf/ExprIterator");
@@ -929,7 +888,7 @@ Java_org_grammaticalframework_pgf_SentenceExtractor_lookupSentence
 	GuEnum* res =
 		pgf_lookup_sentence(get_ref(env, jconcr), type, s, pool, out_pool);
 
-	jfieldID refId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, jconcr), "gr", "Lorg/grammaticalframework/pgf/PGF;");
+	jfieldID refId = (*env)->GetFieldID(env, (*env)->GetObjectcls(env, jconcr), "gr", "Lorg/grammaticalframework/pgf/PGF;");
 	jobject jpgf = (*env)->GetObjectField(env, jconcr, refId);
 
 	jclass expiter_class = (*env)->FindClass(env, "org/grammaticalframework/pgf/ExprIterator");
@@ -1788,7 +1747,7 @@ Java_org_grammaticalframework_pgf_Expr_visit(JNIEnv* env, jobject self, jobject 
 
 		char* sig = gu_string_buf_data(sbuf);
 
-		jclass visitor_class = (*env)->GetObjectClass(env, visitor);
+		jclass visitor_class = (*env)->GetObjectcls(env, visitor);
 		jmethodID methodID = (*env)->GetMethodID(env, visitor_class, method_name, sig);
 		
 		if (methodID != NULL) {
@@ -1818,8 +1777,8 @@ Java_org_grammaticalframework_pgf_Expr_visit(JNIEnv* env, jobject self, jobject 
 JNIEXPORT jboolean JNICALL
 Java_org_grammaticalframework_pgf_Expr_equals(JNIEnv* env, jobject self, jobject other)
 {
-	jclass self_class  = (*env)->GetObjectClass(env, self);
-	jclass other_class = (*env)->GetObjectClass(env, other);
+	jclass self_class  = (*env)->GetObjectcls(env, self);
+	jclass other_class = (*env)->GetObjectcls(env, other);
 
 	if (!(*env)->IsAssignableFrom(env, other_class, self_class))
 		return JNI_FALSE;
@@ -1950,7 +1909,7 @@ Java_org_grammaticalframework_pgf_PGF_compute(JNIEnv* env, jobject self, jobject
 	jmethodID pool_cid = (*env)->GetMethodID(env, pool_class, "<init>", "(J)V");
 	jobject jpool = (*env)->NewObject(env, pool_class, pool_cid, p2l(pool));
 
-	jclass expr_class  = (*env)->GetObjectClass(env, jexpr);
+	jclass expr_class  = (*env)->GetObjectcls(env, jexpr);
 	jmethodID cid = (*env)->GetMethodID(env, expr_class, "<init>", "(Lorg/grammaticalframework/pgf/Pool;Ljava/lang/Object;J)V");
 	jexpr = (*env)->NewObject(env, expr_class, cid, jpool, NULL, p2l(gu_variant_to_ptr(res)));
 
@@ -1989,7 +1948,7 @@ Java_org_grammaticalframework_pgf_PGF_inferExpr(JNIEnv* env, jobject self, jobje
 	jmethodID pool_cid = (*env)->GetMethodID(env, pool_class, "<init>", "(J)V");
 	jobject jpool = (*env)->NewObject(env, pool_class, pool_cid, p2l(pool));
 
-	jclass expr_class  = (*env)->GetObjectClass(env, jexpr);
+	jclass expr_class  = (*env)->GetObjectcls(env, jexpr);
 	jmethodID expr_cid = (*env)->GetMethodID(env, expr_class, "<init>", "(Lorg/grammaticalframework/pgf/Pool;Ljava/lang/Object;J)V");
 	jexpr = (*env)->NewObject(env, expr_class, expr_cid, jpool, NULL, p2l(gu_variant_to_ptr(expr)));
 
@@ -2037,7 +1996,7 @@ Java_org_grammaticalframework_pgf_PGF_checkExpr(JNIEnv* env, jobject self, jobje
 	jmethodID pool_cid = (*env)->GetMethodID(env, pool_class, "<init>", "(J)V");
 	jobject jpool = (*env)->NewObject(env, pool_class, pool_cid, p2l(pool));
 
-	jclass expr_class  = (*env)->GetObjectClass(env, jexpr);
+	jclass expr_class  = (*env)->GetObjectcls(env, jexpr);
 	jmethodID expr_cid = (*env)->GetMethodID(env, expr_class, "<init>", "(Lorg/grammaticalframework/pgf/Pool;Ljava/lang/Object;J)V");
 	jexpr = (*env)->NewObject(env, expr_class, expr_cid, jpool, NULL, p2l(gu_variant_to_ptr(expr)));
 

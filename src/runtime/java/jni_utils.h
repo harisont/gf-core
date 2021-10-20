@@ -47,4 +47,9 @@ new_jlist(JNIEnv *env);
 JPGF_INTERNAL_DECL jmethodID
 get_jlist_add_method(JNIEnv *env);
 
+/* List conversions */
+
+JPGF_INTERNAL jobject
+pgf_type_hypos2j_hypo_list(JNIEnv *env, int n_hypos, PgfTypeHypo *hypos);
+
 #endif

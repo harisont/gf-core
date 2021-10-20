@@ -114,7 +114,7 @@ jstring2pgftext(JNIEnv *env, jstring s)
 
 /* Java shorthands */
 
-JPGF_INTERNAL_DECL jobject
+JPGF_INTERNAL jobject
 new_jlist(JNIEnv *env)
 {
 	jclass lcls = (*env)->FindClass(env, "java/util/ArrayList");
@@ -129,7 +129,7 @@ new_jlist(JNIEnv *env)
 	return list;
 }
 
-JPGF_INTERNAL_DECL jmethodID
+JPGF_INTERNAL jmethodID
 get_jlist_add_method(JNIEnv *env)
 {
 	jclass lcls = (*env)->FindClass(env, "java/util/ArrayList");
@@ -137,4 +137,29 @@ get_jlist_add_method(JNIEnv *env)
 	if (!add_id)
 		return NULL;
 	return add_id;
+}
+
+/* List conversions */
+
+JPGF_INTERNAL jobject
+pgf_type_hypos2j_hypo_list(JNIEnv *env, int n_hypos, PgfTypeHypo *hypos)
+{
+	jobject jhypos = new_jlist(env);
+	jmethodID add_id = get_jlist_add_method(env);
+
+	jclass hcls = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
+	jmethodID cid = (*env)->GetMethodID(env, hcls, "<init>", "(ZLjava/lang/String;Lorg/grammaticalframework/pgf/Type;)V");		
+
+	for (size_t i = 0; i < n_hypos; i++) {
+		// get bindType, var and type from current Hypo
+		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
+		jstring var = pgftext2jstring(env,hypos[i].cid);
+		jobject type = (jobject)hypos[i].type;
+
+		jobject hObj = (*env)->NewObject(env, hcls, cid, bindType, var, type);
+
+		(*env)->CallBooleanMethod(env, jhypos, add_id, hObj);
+	}
+
+	return jhypos;
 }
