@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <math.h>
+
 #include <pgf/pgf.h>
 
 #include <jni.h>
@@ -417,6 +419,25 @@ Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self,
 	return (jobject)t;
 }
 
+JNIEXPORT jdouble JNICALL
+Java_org_grammaticalframework_pgf_PGF_getFunctionProbability(JNIEnv* env, jobject self, jstring f)
+{
+	PgfExn err;
+
+	PgfText *fname = jstring2pgftext(env, f);
+	prob_t p = pgf_function_prob(get_db(env, self),(long)get_rev(env, self), fname, &err);
+
+	free(fname);
+
+	handleError(env,err);
+	double dp = (double) p;
+    if (dp == INFINITY) {
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "function is not defined");
+    }
+
+    return (jdouble)dp;
+}
+
 JNIEXPORT void JNICALL 
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
@@ -447,18 +468,6 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 
 
 /*
-JNIEXPORT jdouble JNICALL
-Java_org_grammaticalframework_pgf_PGF_getFunctionProb(JNIEnv* env, jobject self, jstring jid)
-{
-	PGF* pgf = get_ref(env, self);
-	GuPool* tmp_pool = gu_local_pool();
-	PgfCId id = j2gu_string(env, jid, tmp_pool);
-	prob_t prob = pgf_function_prob(pgf, id);
-	gu_pool_free(tmp_pool);
-
-	return prob;
-}
-
 static void
 pgf_collect_langs(GuMapItor* fn, const void* key, void* value, GuExn* err)
 {
