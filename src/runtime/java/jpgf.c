@@ -18,7 +18,8 @@ typedef struct {
 	jmethodID method_id;
 } JPGFClosure;
 
-// marshalling/unmarshalling
+//////////////////////////////////////////////////////////////////////////////
+// Marshalling and unmarshalling
 
 static PgfExpr
 eabs(PgfUnmarshaller *this, PgfBindType btype, PgfText *name, PgfExpr body)
@@ -145,7 +146,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
     return JNI_VERSION_1_6;
 }
 
-///////// methods
+////////////////////////////////////////////////////////////////////////////// 
+// Native methods
 
 /* PGF */
 
@@ -425,76 +427,6 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 
 
 /*
-typedef struct {
-	GuInStream stream;
-	jobject java_stream;
-	JNIEnv *env;
-	jmethodID read_method;
-	jbyteArray buf_array;
-	jbyte *buf;
-} JInStream;
-
-static const uint8_t*
-jpgf_jstream_begin_buffer(GuInStream* self, size_t* sz_out, GuExn* err)
-{
-	*sz_out = 0;
-
-	JInStream* jstream = (JInStream*) self;
-	int sz = (*jstream->env)->CallIntMethod(jstream->env, jstream->java_stream, jstream->read_method, jstream->buf_array);
-	if ((*jstream->env)->ExceptionOccurred(jstream->env)) {
-		gu_raise(err, PgfExn);
-		return NULL;
-	}
-
-	jboolean isCopy;
-	jstream->buf = (*jstream->env)->GetByteArrayElements(jstream->env, jstream->buf_array, &isCopy);
-	if ((*jstream->env)->ExceptionOccurred(jstream->env)) {
-		gu_raise(err, PgfExn);
-		return NULL;
-	}
-
-	*sz_out = (size_t) sz;
-	return ((uint8_t*) jstream->buf);
-}
-
-static void
-jpgf_jstream_end_buffer(GuInStream* self, size_t consumed, GuExn* err)
-{
-	JInStream* jstream = (JInStream*) self;
-	(*jstream->env)->ReleaseByteArrayElements(jstream->env, jstream->buf_array, jstream->buf, JNI_ABORT);
-}
-
-static GuInStream*
-jpgf_new_java_stream(JNIEnv* env, jobject java_stream, GuPool* pool)
-{
-	jclass java_stream_class = (*env)->GetObjectcls(env, java_stream);
-
-	JInStream* jstream = gu_new(JInStream, pool);
-	jstream->stream.begin_buffer = jpgf_jstream_begin_buffer;
-	jstream->stream.end_buffer = jpgf_jstream_end_buffer;
-	jstream->stream.input = NULL;
-	jstream->java_stream = java_stream;
-	jstream->env = env;
-
-	jstream->read_method = (*env)->GetMethodID(env, java_stream_class, "read", "([B)I");
-	if (!jstream->read_method) {
-		return NULL;
-	}
-
-	jstream->buf_array = (*env)->NewByteArray(env, 1024);
-	if (!jstream->buf_array) {
-		return NULL;
-	}
-
-	jstream->buf = NULL;
-
-	return &jstream->stream;
-}
-
-*/
-
-/*
-
 JNIEXPORT jobject JNICALL
 Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self, jstring jid)
 {
