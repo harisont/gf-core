@@ -397,6 +397,26 @@ Java_org_grammaticalframework_pgf_PGF_functionIsConstructor(JNIEnv* env, jobject
     return is_constr == 0 ? JNI_FALSE : JNI_TRUE;
 }
 
+JNIEXPORT jobject JNICALL
+Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self, jstring f)
+{
+	PgfExn err;
+
+	PgfText *fname = jstring2pgftext(env, f);
+	PgfType t = pgf_function_type(get_db(env, self),(long)get_rev(env, self), fname, &unmarshaller, &err);
+
+	free(fname);
+
+	if (t == 0) {
+        throw_string_exception(env, "org/grammaticalframework/pgf/PGFError", "function is not defined");
+        return NULL;
+	} else if (handleError(env, err) != PGF_EXN_NONE) {
+		return NULL;
+	}
+
+	return (jobject)t;
+}
+
 JNIEXPORT void JNICALL 
 Java_org_grammaticalframework_pgf_PGF_finalize(JNIEnv *env, jobject self)
 {	
@@ -427,25 +447,6 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 
 
 /*
-JNIEXPORT jobject JNICALL
-Java_org_grammaticalframework_pgf_PGF_getFunctionType(JNIEnv* env, jobject self, jstring jid)
-{
-	PGF* pgf = get_ref(env, self);
-	GuPool* tmp_pool = gu_new_pool();
-	PgfCId id = j2gu_string(env, jid, tmp_pool);
-	PgfType* tp = pgf_function_type(pgf, id);
-	gu_pool_free(tmp_pool);
-
-	if (tp == NULL)
-		return NULL;
-
-	jclass type_class = (*env)->FindClass(env, "org/grammaticalframework/pgf/Type");
-	jmethodID cid = (*env)->GetMethodID(env, type_class, "<init>", "(Ljava/lang/Object;J)V");
-	jobject jtype = (*env)->NewObject(env, type_class, cid, self, p2l(tp));
-
-	return jtype;
-}
-
 JNIEXPORT jdouble JNICALL
 Java_org_grammaticalframework_pgf_PGF_getFunctionProb(JNIEnv* env, jobject self, jstring jid)
 {

@@ -40,7 +40,7 @@ public class TestBasic {
   }
   
   @Test
-  public void readPGF_NotExisting() {
+  public void readPGF_NonExisting() {
     boolean thrown = false;
     try {
       PGF.readPGF("abc.pgf");
@@ -89,7 +89,7 @@ public class TestBasic {
   }
 
   @Test
-  public void bootNGF_NotExisting() {
+  public void bootNGF_NonExisting() {
     boolean thrown = false;
     String ngfPath = "new.ngf";
     try {
@@ -152,7 +152,7 @@ public class TestBasic {
   }
   
   @Test
-  public void readNGF_NotExisting() {
+  public void readNGF_NonExisting() {
     boolean thrown = false;
     try {
       PGF.readNGF("abc.ngf");
@@ -345,6 +345,42 @@ public class TestBasic {
     assertEquals(false, pgf.functionIsConstructor("ind"));
   }
 
+  @Test
+  public void functionType_z() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(Type.readType("N"), pgf.getFunctionType("z"));
+  }
+
+  @Test
+  public void functionType_s() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(Type.readType("N -> N"), pgf.getFunctionType("s"));
+  }
+
+  @Test
+  public void functionType_c() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertEquals(Type.readType("N -> S"), pgf.getFunctionType("c"));
+  }
+
+  @Test
+  public void functionType_NonExisting() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    boolean thrown = false;
+    try {
+      pgf.getFunctionType("cbx");
+    } catch (PGFError e) {
+      thrown = true;
+    }
+  assertTrue(thrown);
+  }
+
+  @Test
+  public void functionType_Wrong() throws FileNotFoundException {
+    PGF pgf = PGF.readPGF("../haskell/tests/basic.pgf");
+    assertNotEquals(Type.readType("N -> S -> X"), pgf.getFunctionType("c"));
+  }
+  
   /* Type */
 
   // readType
