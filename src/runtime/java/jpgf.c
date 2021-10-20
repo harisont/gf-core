@@ -153,14 +153,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
 
 JPGF_INTERNAL void*
 get_db(JNIEnv *env, jobject self) {
-	jfieldID dbId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "db", "J");
-	return l2p((*env)->GetLongField(env, self, dbId));
+	jfieldID db_id = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "db", "J");
+	return l2p((*env)->GetLongField(env, self, db_id));
 }
 
 JPGF_INTERNAL void*
 get_rev(JNIEnv *env, jobject self) {
-	jfieldID revId = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "rev", "J");
-	return l2p((*env)->GetLongField(env, self, revId));
+	jfieldID rev_id = (*env)->GetFieldID(env, (*env)->GetObjectClass(env, self), "rev", "J");
+	return l2p((*env)->GetLongField(env, self, rev_id));
 }
 
 JNIEXPORT jobject JNICALL 
@@ -177,8 +177,8 @@ Java_org_grammaticalframework_pgf_PGF_readPGF__Ljava_lang_String_2(JNIEnv *env, 
 		jmethodID cid = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
 		return (*env)->NewObject(env, cls, cid, db, rev);
 	} else {
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
+		jmethodID fid = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, fid);
 		return NULL;
 	}
 }
@@ -197,8 +197,8 @@ Java_org_grammaticalframework_pgf_PGF_bootNGF(JNIEnv* env, jclass cls, jstring p
 		jmethodID cid = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
 		return (*env)->NewObject(env, cls, cid, db, rev);
 	} else {
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
+		jmethodID fid = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, fid);
 		return NULL;
 	}
 }
@@ -217,8 +217,8 @@ Java_org_grammaticalframework_pgf_PGF_readNGF(JNIEnv *env, jclass cls, jstring s
 		jmethodID cid = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
 		return (*env)->NewObject(env, cls, cid, db, rev);
 	} else {
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
+		jmethodID fid = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, fid);
 		return NULL;
 	}
 }
@@ -247,8 +247,8 @@ Java_org_grammaticalframework_pgf_PGF_newNGF__Ljava_lang_String_2Ljava_lang_Stri
 		jmethodID cid = (*env)->GetMethodID(env, cls, "<init>", "(JJ)V");
 		return (*env)->NewObject(env, cls, cid, db, rev);
 	} else {
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
+		jmethodID fid = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, fid);
 		return NULL;
 	}
 }
@@ -273,8 +273,8 @@ Java_org_grammaticalframework_pgf_PGF_getAbstractName(JNIEnv* env, jobject self)
 
 	if (err.type != PGF_EXN_NONE) {
 		jclass cls = (*env)->GetObjectClass(env, self);
-		jmethodID finalizeId = (*env)->GetMethodID(env, cls, "finalize", "()V");
-		(*env)->CallVoidMethod(env, cls, finalizeId);
+		jmethodID fid = (*env)->GetMethodID(env, cls, "finalize", "()V");
+		(*env)->CallVoidMethod(env, cls, fid);
 		return NULL;
 	}
 
@@ -386,13 +386,13 @@ Java_org_grammaticalframework_pgf_PGF_functionIsConstructor(JNIEnv* env, jobject
 	PgfExn err;
 
 	PgfText *fname = jstring2pgftext(env, f);
-	int isConstr = pgf_function_is_constructor(get_db(env, self),(long)get_rev(env, self), fname, &err);
+	int is_constr = pgf_function_is_constructor(get_db(env, self),(long)get_rev(env, self), fname, &err);
 
 	free(fname);
 
 	handleError(env, err);
 
-    return isConstr == 0 ? JNI_FALSE : JNI_TRUE;
+    return is_constr == 0 ? JNI_FALSE : JNI_TRUE;
 }
 
 JNIEXPORT void JNICALL 
