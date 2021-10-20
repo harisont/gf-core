@@ -1,6 +1,7 @@
 package org.grammaticalframework.pgf;
 
 public class Hypo {
+	
 	public boolean getBindType() {
 		return this.bindType;
 	}

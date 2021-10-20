@@ -3,16 +3,31 @@ package org.grammaticalframework.pgf;
 /** A class for types in the abstract syntax of a grammar */
 public class Type {
 
-	/** The category */
-	public native String getCategory();
+	/**
+	 * Returns the category of the type.
+	 * @return The category of the type.
+	 */
+	public String getCategory() {
+		return this.cat;
+	}
 	
-	/** An array of arguments for the category */
-	//public native Expr[] getExprs();
+	/**
+	 * Returns an array of arguments for the category.
+	 * @return An array of arguments for the category.
+	 */
+	public Expr[] getExprs() {
+		return this.exprs;
+	}
 	
-	/** An array of hypotheses if this is a function type. 
+	/**
+	 * Returns an array of hypotheses if the type is a function type. 
 	 * If the represented type is A1 -&gt; A2 -&gt; ... An -&gt; B, then
-	 * the hypotheses represent the types in A1, A2 ... An. */
-	//public native Hypo[] getHypos();
+	 * the hypotheses represent the types in A1, A2 ... An.
+	 * @return An array of hypotheses if this is a function type.
+	 */
+	public Hypo[] getHypos() {
+		return this.hypos;
+	}
 	
 	/**
 	 * Reads a type from the given string.

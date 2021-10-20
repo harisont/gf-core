@@ -1980,13 +1980,6 @@ Java_org_grammaticalframework_pgf_Expr_size(JNIEnv* env, jobject self)
 	return pgf_expr_size(e);
 }
 
-JNIEXPORT jstring JNICALL
-Java_org_grammaticalframework_pgf_Type_getCategory(JNIEnv* env, jobject self)
-{
-	PgfType* tp = get_ref(env, self);
-	return gu2j_string(env, tp->cid);
-}
-
 JNIEXPORT jobjectArray JNICALL
 Java_org_grammaticalframework_pgf_Type_getHypos(JNIEnv* env, jobject self)
 {
