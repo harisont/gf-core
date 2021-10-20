@@ -39,4 +39,12 @@ pgftext2jstring(JNIEnv *env, PgfText* s);
 JPGF_INTERNAL_DECL PgfText* 
 jstring2pgftext(JNIEnv *env, jstring s);
 
+/* Java shorthands */
+
+JPGF_INTERNAL_DECL jobject
+new_jlist(JNIEnv *env);
+
+JPGF_INTERNAL_DECL jmethodID
+get_jlist_add_method(JNIEnv *env);
+
 #endif

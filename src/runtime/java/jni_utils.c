@@ -19,10 +19,10 @@ throw_jstring_exception(JNIEnv *env, const char* class_name, jstring msg)
 	jclass exception_class = (*env)->FindClass(env, class_name);
 	if (!exception_class)
 		return;
-	jmethodID constrId = (*env)->GetMethodID(env, exception_class, "<init>", "(Ljava/lang/String;)V");
-	if (!constrId)
+	jmethodID cid = (*env)->GetMethodID(env, exception_class, "<init>", "(Ljava/lang/String;)V");
+	if (!cid)
 		return;
-	jobject exception = (*env)->NewObject(env, exception_class, constrId, msg);
+	jobject exception = (*env)->NewObject(env, exception_class, cid, msg);
 	if (!exception)
 		return;
 	(*env)->Throw(env, exception);
@@ -110,4 +110,31 @@ jstring2pgftext(JNIEnv *env, jstring s)
 	pgfText->size = (size_t)size;
 	(*env)->ReleaseStringUTFChars(env, s, text);
 	return pgfText;
+}
+
+/* Java shorthands */
+
+JPGF_INTERNAL_DECL jobject
+new_jlist(JNIEnv *env)
+{
+	jclass lcls = (*env)->FindClass(env, "java/util/ArrayList");
+	if (!lcls)
+		return NULL;
+	jmethodID cid = (*env)->GetMethodID(env, lcls, "<init>", "()V");
+	if (!cid)
+		return NULL;
+	jobject list = (*env)->NewObject(env, lcls, cid);
+	if (!list)
+		return NULL;
+	return list;
+}
+
+JPGF_INTERNAL_DECL jmethodID
+get_jlist_add_method(JNIEnv *env)
+{
+	jclass lcls = (*env)->FindClass(env, "java/util/ArrayList");
+	jmethodID add_id = (*env)->GetMethodID(env, lcls, "add", "(Ljava/lang/Object;)Z");
+	if (!add_id)
+		return NULL;
+	return add_id;
 }
