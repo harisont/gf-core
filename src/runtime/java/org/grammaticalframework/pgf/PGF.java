@@ -75,7 +75,9 @@ public class PGF {
 
 	/**
 	 * Returns the start category for the grammar.
-	 * @return The start category for the grammar (as a `Type`).
+	 * @return The start category for the grammar (as a `Type`, but we might
+	 * want to change it back to a `String` since for instance `getCategories`
+	 * returns a list of strings).
 	 */
 	public native Type getStartCat();
 
