@@ -1,5 +1,8 @@
 package org.grammaticalframework.pgf;
 
+import java.util.Arrays;
+import java.util.List;
+
 /** A class for types in the abstract syntax of a grammar */
 public class Type {
 
@@ -37,7 +40,12 @@ public class Type {
 	public native static Type readType(String s);
 
 	@Override
-	public native String toString();
+	public String toString() {
+		String[] vars = {};
+		return toString(Arrays.asList(vars));
+	}
+
+	public native String toString(List<String> vars);
 	
 	@Override
     public boolean equals(Object o) {

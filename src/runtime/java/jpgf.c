@@ -541,6 +541,11 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 	return (jobject)t;
 }
 
+JNIEXPORT jstring JNICALL
+Java_org_grammaticalframework_pgf_Type_toString___3Ljava_lang_String(JNIEnv* env, jobject self)
+{
+	// TODO:
+}
 
 /*
 static void
@@ -1840,23 +1845,6 @@ Java_org_grammaticalframework_pgf_Type_getHypos(JNIEnv* env, jobject self)
 		(*env)->DeleteLocalRef(env, jhypo);
 	}
 	return jhypos;
-}
-
-JNIEXPORT jstring JNICALL
-Java_org_grammaticalframework_pgf_Type_toString(JNIEnv* env, jobject self)
-{
-	GuPool* tmp_pool = gu_local_pool();
-
-	GuExn* err = gu_exn(tmp_pool);
-	GuStringBuf* sbuf = gu_new_string_buf(tmp_pool);
-	GuOut* out = gu_string_buf_out(sbuf);
-
-	pgf_print_type(get_ref(env, self), NULL, 0, out, err);
-
-	jstring jstr = gu2j_string_buf(env, sbuf);
-
-	gu_pool_free(tmp_pool);
-	return jstr;
 }
 
 JNIEXPORT jobject JNICALL
