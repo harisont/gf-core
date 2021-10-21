@@ -131,6 +131,33 @@ static PgfUnmarshallerVtbl unmarshallerVtbl =
 
 PgfUnmarshaller unmarshaller = { &unmarshallerVtbl };
 
+static object
+match_lit(PgfMarshaller *this, PgfUnmarshaller *u, PgfLiteral lit)
+{
+    // TODO:
+}
+
+static object
+match_expr(PgfMarshaller *this, PgfUnmarshaller *u, PgfExpr expr)
+{
+    // TODO:
+}
+
+static object
+match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
+{
+    // TODO:
+}
+
+static PgfMarshallerVtbl marshallerVtbl =
+{
+    match_lit,
+    match_expr,
+    match_type
+};
+
+PgfMarshaller marshaller = { &marshallerVtbl };
+
 static void
 pgf_collect_names(PgfItor* fn, PgfText* key, void* value, PgfExn* err)
 {
