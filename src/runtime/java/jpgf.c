@@ -90,13 +90,13 @@ lstr(PgfUnmarshaller *this, PgfText *v)
 }
 
 JPGF_INTERNAL PgfType
-dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *hypos, PgfText *cat, int n_exprs, PgfExpr *exprs)
+dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *phypos, PgfText *pcat, int n_exprs, PgfExpr *pexprs)
 {	
 	JNIEnv *env;
     (*cachedJVM)->AttachCurrentThread(cachedJVM, (void **)&env, NULL);
 
-	jobject jhypos = pgf_type_hypos2j_hypo_list(env, n_hypos, hypos);
-	jstring cname = pgftext2jstring(env, cat); 
+	jobject jhypos = pgf_type_hypos2j_hypo_list(env, n_hypos, phypos);
+	jstring cname = pgftext2jstring(env, pcat); 
 	jobject jexprs = new_jlist(env); // TODO: fill it with Exprs
 
 	jclass tcls = (*env)->FindClass(env, "org/grammaticalframework/pgf/Type");
@@ -146,7 +146,54 @@ match_expr(PgfMarshaller *this, PgfUnmarshaller *u, PgfExpr expr)
 static object
 match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
 {
-    // TODO:
+	// convert PgfType to java Type
+    jobject t = (jobject)ty;
+
+	// get corresponding class
+	jclass tcls = (*env)->GetObjectClass(env, t); 
+
+	// convert Type.hypos (:: Hypo[]) to PgfTypeHypo*
+	jsize n_hypos; 
+	jfieldID hid = (*env)->GetFieldID(env, tcls, "hypos", "[Lorg/grammaticalframework/pgf/Hypo");
+	PgfTypeHypo* phypos = j_hypo_list2pgf_type_hypos(env, &n_hypos, (*env)->GetObjectField(env, t, hid));
+	if (phypos == NULL) {
+        return 0;
+    }
+
+	// convert Type.cat (:: String) to C-style string
+	jfieldID cid = (*env)->GetFieldID(env, tcls, "cat", "Ljava/lang/String");
+	PgfText* pcat = jstring2pgftext(env, (*env)->GetObjectField(env, t, cid));
+	if (pcat == NULL) {
+        return 0;
+    }
+
+	// convert Type.exprs (:: Expr[]) to PgfExpr[]
+	jfieldID eid = (*env)->GetFieldID(env, tcls, "exprs", "[Lorg/grammaticalframework/pgf/Hypo");
+	jobject exprs = (*env)->GetObjectField(env, t, eid);
+	jsize n_exprs = (*env)->GetArrayLength(env,exprs); 
+	PgfExpr pexprs[n_exprs];
+	for (jsize i = 0; i < n_exprs; i++) {
+		pexprs[i] = (PgfExpr)(*env)->GetObjectArrayElement(env, exprs, n_exprs);
+	}
+
+	object res = u->vtbl->dtyp(u, n_hypos, phypos, pcat, n_exprs, pexprs);
+
+	// free phypos
+	for (jsize i = 0; i < n_hypos; i++) {
+		free(phypos[i].cid);
+		//TODO: free(phypos[i].type);
+	}
+	free(phypos);
+
+	// free pcat
+	free(pcat);
+
+	// TODO: free pexprs
+	//for (jsize i = 0; i < n_exprs; i++) {
+    //    free(pexprs[i]);
+	//}
+
+	return res;
 }
 
 static PgfMarshallerVtbl marshallerVtbl =
@@ -340,19 +387,19 @@ Java_org_grammaticalframework_pgf_PGF_categoryContext(JNIEnv* env, jobject self,
 	size_t n_hypos;
 
 	PgfText *cname = jstring2pgftext(env,c);
-	PgfTypeHypo *hypos = pgf_category_context(get_db(env, self),(long)get_rev(env, self), cname, &n_hypos, &unmarshaller, &err);
+	PgfTypeHypo *phypos = pgf_category_context(get_db(env, self),(long)get_rev(env, self), cname, &n_hypos, &unmarshaller, &err);
 	
-	if (handleError(env,err) != PGF_EXN_NONE || hypos == NULL) {
+	if (handleError(env,err) != PGF_EXN_NONE || phypos == NULL) {
         return NULL;
     }
 
-	jobject ctxs = pgf_type_hypos2j_hypo_list(env, n_hypos, hypos);
+	jobject ctxs = pgf_type_hypos2j_hypo_list(env, n_hypos, phypos);
 
 	for (size_t i = 0; i < n_hypos; i++) {
-        free(hypos[i].cid);
+        free(phypos[i].cid);
         // should not be necessary to clean hypos[i].type as it is just a regular Java object (?)
     }
-    free(hypos);
+    free(phypos);
 
     return ctxs;
 }

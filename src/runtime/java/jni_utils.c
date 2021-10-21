@@ -142,7 +142,7 @@ get_jlist_add_method(JNIEnv *env)
 /* List conversions */
 
 JPGF_INTERNAL jobject
-pgf_type_hypos2j_hypo_list(JNIEnv *env, int n_hypos, PgfTypeHypo *hypos)
+pgf_type_hypos2j_hypo_list(JNIEnv *env, size_t n_hypos, PgfTypeHypo *phypos)
 {
 	jobject jhypos = new_jlist(env);
 	jmethodID add_id = get_jlist_add_method(env);
@@ -152,9 +152,9 @@ pgf_type_hypos2j_hypo_list(JNIEnv *env, int n_hypos, PgfTypeHypo *hypos)
 
 	for (size_t i = 0; i < n_hypos; i++) {
 		// get bindType, var and type from current Hypo
-		jboolean bindType = hypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
-		jstring var = pgftext2jstring(env,hypos[i].cid);
-		jobject type = (jobject)hypos[i].type;
+		jboolean bindType = phypos[i].bind_type == 0 ? JNI_TRUE : JNI_FALSE;
+		jstring var = pgftext2jstring(env,phypos[i].cid);
+		jobject type = (jobject)phypos[i].type;
 
 		jobject hObj = (*env)->NewObject(env, hcls, cid, bindType, var, type);
 
@@ -162,4 +162,11 @@ pgf_type_hypos2j_hypo_list(JNIEnv *env, int n_hypos, PgfTypeHypo *hypos)
 	}
 
 	return jhypos;
+}
+
+JPGF_INTERNAL_DECL PgfTypeHypo*
+j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize *n_hypos, jobject hypos)
+{
+	// TODO:
+	return NULL;
 }

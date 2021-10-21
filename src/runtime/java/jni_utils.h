@@ -60,7 +60,11 @@ get_jlist_add_method(JNIEnv *env);
 /* List conversions */
 
 /* Convert an array of `PgfTypeHypo`s to a Java list of `Hypo`s . */
-JPGF_INTERNAL jobject
-pgf_type_hypos2j_hypo_list(JNIEnv *env, int n_hypos, PgfTypeHypo *hypos);
+JPGF_INTERNAL_DECL jobject
+pgf_type_hypos2j_hypo_list(JNIEnv *env, size_t n_hypos, PgfTypeHypo *phypos);
+
+/* Convert a Java list of `Hypo`s to an array of `PgfTypeHypo`s */
+JPGF_INTERNAL_DECL PgfTypeHypo*
+j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize *n_hypos, jobject hypos);
 
 #endif
