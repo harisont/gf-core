@@ -2,16 +2,27 @@ package org.grammaticalframework.pgf;
 
 public class Hypo {
 	
+	/**
+	 * Returns the hypothesis's bind type (`true` if explicit, 
+	 * `false` if implicit).
+	 * @return The hypothesis's bind type.
+	 */
 	public boolean getBindType() {
 		return this.bindType;
 	}
 	
-	/** The name of the bound variable or '_' if there is none */
+	/**
+	 * Returns the name of the bound variable (`_` if there is none).
+	 * @return The name of the bound variable.
+	 */
 	public String getVar() {
 		return this.var;
 	};
 	
-	/** The type for this hypothesis */
+	/**
+	 * Returns the type for the hypothesis.
+	 * @return The type for the hypothesis.
+	 */
 	public Type getType() {
 		return this.type;
 	}
