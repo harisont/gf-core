@@ -153,9 +153,10 @@ match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
 	jclass tcls = (*env)->GetObjectClass(env, t); 
 
 	// convert Type.hypos (:: Hypo[]) to PgfTypeHypo*
-	jsize n_hypos; 
 	jfieldID hid = (*env)->GetFieldID(env, tcls, "hypos", "[Lorg/grammaticalframework/pgf/Hypo");
-	PgfTypeHypo* phypos = j_hypo_list2pgf_type_hypos(env, &n_hypos, (*env)->GetObjectField(env, t, hid));
+	jobject hypos = (*env)->GetObjectField(env, t, hid);
+	jsize n_hypos = (*env)->GetArrayLength(env,hypos);
+	PgfTypeHypo* phypos = j_hypo_list2pgf_type_hypos(env, n_hypos, hypos);
 	if (phypos == NULL) {
         return 0;
     }

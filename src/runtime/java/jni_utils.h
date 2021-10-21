@@ -65,6 +65,6 @@ pgf_type_hypos2j_hypo_list(JNIEnv *env, size_t n_hypos, PgfTypeHypo *phypos);
 
 /* Convert a Java list of `Hypo`s to an array of `PgfTypeHypo`s */
 JPGF_INTERNAL_DECL PgfTypeHypo*
-j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize *n_hypos, jobject hypos);
+j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize n_hypos, jobject hypos);
 
 #endif

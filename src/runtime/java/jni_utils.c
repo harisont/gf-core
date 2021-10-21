@@ -165,8 +165,33 @@ pgf_type_hypos2j_hypo_list(JNIEnv *env, size_t n_hypos, PgfTypeHypo *phypos)
 }
 
 JPGF_INTERNAL_DECL PgfTypeHypo*
-j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize *n_hypos, jobject hypos)
-{
-	// TODO:
-	return NULL;
+j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize n_hypos, jobject hypos)
+{	
+	// find Hypo class
+	jclass hcls = (*env)->FindClass(env, "org/grammaticalframework/pgf/Hypo");
+
+	// allocate array of PgfTypeHypos 
+	PgfTypeHypo *phypos = malloc(sizeof(PgfTypeHypo) * n_hypos);
+
+	for (jsize i = 0; i < n_hypos; i++) {
+		// get current Hypo
+		jobject h = (*env)->GetObjectArrayElement(env, hypos, i);
+
+		// h.bindType
+		jfieldID bid = (*env)->GetFieldID(env, hcls, "bindType", "Z");
+		jboolean bt = (*env)->GetBooleanField(env, h, bid);
+		phypos[i].bind_type = bt == JNI_TRUE ? PGF_BIND_TYPE_EXPLICIT : PGF_BIND_TYPE_IMPLICIT;
+
+		// h.var
+		jfieldID vid = (*env)->GetFieldID(env, hcls, "var", "Ljava/lang/String");
+		jobject v = (*env)->GetObjectField(env, h, vid);
+		phypos[i].cid = jstring2pgftext(env, v);
+
+		// h.type
+		jfieldID tid = (*env)->GetFieldID(env, hcls, "type", "Lorg/grammaticalframework/pgf/Type");
+		jobject t = (*env)->GetObjectField(env, h, tid);
+		phypos[i].type = (PgfType)t;
+	}
+
+	return phypos;
 }
