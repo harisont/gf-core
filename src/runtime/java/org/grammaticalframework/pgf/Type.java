@@ -6,6 +6,30 @@ import java.util.List;
 /** A class for types in the abstract syntax of a grammar */
 public class Type {
 
+	public Type(Hypo[] hypos, String cat, Expr[] exprs) {
+		this.hypos = hypos;
+		this.cat = cat;
+		this.exprs = exprs;
+	}
+
+	public Type(Hypo[] hypos, String cat) {
+		this.hypos = hypos;
+		this.cat = cat;
+		this.exprs = new Expr[0];
+	}
+
+	public Type(String cat, Expr[] exprs) {
+		this.hypos = new Hypo[0];
+		this.cat = cat;
+		this.exprs = exprs;
+	}
+
+	public Type(String cat) {
+		this.hypos = new Hypo[0];
+		this.cat = cat;
+		this.exprs = new Expr[0];
+	}
+
 	/**
 	 * Returns the category of the type.
 	 * @return The category of the type.
