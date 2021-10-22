@@ -63,11 +63,11 @@ public class Type {
 	 */
 	public native static Type readType(String s);
 
-	@Override
-	public String toString() {
-		String[] vars = {};
-		return toString(Arrays.asList(vars));
-	}
+	//@Override
+	//public String toString() {
+	//	//String[] vars = {};
+	//	//return toString(Arrays.asList(vars));
+	//}
 
 	public native String toString(List<String> vars);
 	
