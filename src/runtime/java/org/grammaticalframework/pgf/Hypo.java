@@ -3,6 +3,48 @@ package org.grammaticalframework.pgf;
 public class Hypo {
 	
 	/**
+	 * Basically a constructor of `Hypo`s for non-dependent `Type`s, i.e. `A`,
+	 * taking only the `Type` itself as parameter.
+	 * It sets `bindType` to `true` and `var` to `_`.
+	 * @param type A `Type`.
+	 * @return A `Hypo` for the non-dependent type `type`.
+	 */
+	public static Hypo mkHypo(Type type) {
+		boolean bt = true;
+		String v = "_";
+		Type t = type;
+		return new Hypo(bt, v, t);
+	}
+
+	/**
+	 * Basically a constructor of `Hypo`s for dependent types, i.e. `x : A`.
+	 * It sets `bindType` to `true`.
+	 * @param var A variable name.
+	 * @param type A `Type`.
+	 * @return A `Hypo` for the dependent type `type`.
+	 */
+	public static Hypo mkDepHypo(String var, Type type) {
+		boolean bt = true;
+		String v = var;
+		Type t = type;
+		return new Hypo(bt, v, t);
+	}
+
+	/**
+	 * Basically a constructor of `Hypo`s for dependent types with implicit
+	 * arguments, i.e. `{x} : A`. It sets `bindType` to `false`.
+	 * @param var A variable name.
+	 * @param type A `Type`.
+	 * @return A `Hypo` for the dependent type `type`.
+	 */
+	public static Hypo mkImplHypo(String var, Type type) {
+		boolean bt = false;
+		String v = var;
+		Type t = type;
+		return new Hypo(bt, v, t);
+	}
+	
+	/**
 	 * Returns the hypothesis's bind type (`true` if explicit, 
 	 * `false` if implicit).
 	 * @return The hypothesis's bind type.
