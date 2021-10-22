@@ -383,6 +383,61 @@ public class TestBasic {
   
   /* Type */
 
+  // constructors
+  @Test
+  public void typeConstructor_A() {
+    Type t1 = new Type(new Hypo[0], "A", new Expr[0]);
+    Type t2 = new Type("A");
+    assertEquals(t1,t2);
+  }
+
+  @Test
+  public void typeConstructor_AB() {
+    Hypo[] hypos = new Hypo[1];
+    hypos[0] = Hypo.mkHypo(new Type("A"));
+    Type t1 = new Type(hypos, "B", new Expr[0]);
+    Type t2 = new Type(hypos, "B");
+    assertEquals(t1,t2);
+  }
+
+  @Test
+  public void typeConstructor_AB_2() {
+    Hypo[] hypos = new Hypo[1];
+    hypos[0] = Hypo.mkDepHypo("_", new Type("A"));
+    Type t1 = new Type(hypos, "B", new Expr[0]);
+    Type t2 = new Type(hypos, "B");
+    assertEquals(t1,t2);
+  }
+
+  // TODO: requires Expr constructor
+  //@Test
+  //public void typeConstructor_A3() {
+  //  
+  //}
+  
+  // getters
+
+  @Test
+  public void typeGetters() {
+    Hypo[] hypos = new Hypo[1];
+    Hypo hypo = Hypo.mkDepHypo("x", new Type("N"));
+    hypos[0] = hypo;
+    Expr[] exprs = new Expr[0]; // TODO: change length to 1
+    // TODO: Expr expr = new 
+    Type type = new Type(hypos, "N", exprs);
+    assertEquals(1, type.getHypos().length);
+    assertEquals(hypo, type.getHypos()[0]);
+    assertEquals("N", type.getCategory());
+    assertEquals(0, type.getExprs().length); // TODO: change expected to 1
+  }
+
+  // toString
+
+  //@Test
+  //public void typeToString_N() {
+  //  TODO:
+  //}
+
   // readType
 
   @Test 
