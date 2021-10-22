@@ -76,7 +76,7 @@ public class Type {
         if (o == this) return true; // same object
         if (!(o instanceof Type)) return false;
 		Type t = (Type)o;
-        return this.hypos.equals(t.hypos) && this.cat.equals(t.cat) && this.exprs.equals(t.exprs);
+        return Arrays.equals(this.hypos, t.hypos) && this.cat.equals(t.cat) && Arrays.equals(this.exprs, t.exprs);
 	}
 
 	//////////////////////////////////////////////////////////////////
