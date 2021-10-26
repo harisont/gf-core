@@ -542,9 +542,14 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 }
 
 JNIEXPORT jstring JNICALL
-Java_org_grammaticalframework_pgf_Type_toString___3Ljava_lang_String(JNIEnv* env, jobject self)
+Java_org_grammaticalframework_pgf_Type_toString___3Ljava_lang_String_2(JNIEnv* env, jobject self, jobjectArray vs)
 {
-	// TODO:
+	// TODO: build ctx from vs
+	PgfText *p = pgf_print_type((PgfType)&self, NULL, 0, &marshaller);
+	// TODO: free ctx
+	jstring s = pgftext2jstring(env, p);
+	free(p);
+	return s;
 }
 
 /*

@@ -63,13 +63,21 @@ public class Type {
 	 */
 	public native static Type readType(String s);
 
-	//@Override
-	//public String toString() {
-	//	//String[] vars = {};
-	//	//return toString(Arrays.asList(vars));
-	//}
+	/**
+	 * Convert a `Type` to `String`.
+	 * @return The string equivalent of the Type, excluding any variables in 
+	 * it.
+	 */
+	@Override
+	public String toString() {
+		return toString(new String[0]);
+	}
 
-	public native String toString(List<String> vars);
+	/**
+	 * Convert a `Type` to `String`.
+	 * @return The string equivalent of the Type.
+	 */
+	public native String toString(String[] vars);
 	
 	@Override
     public boolean equals(Object o) {
