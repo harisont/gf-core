@@ -93,7 +93,7 @@ JPGF_INTERNAL PgfType
 dtyp(PgfUnmarshaller *this, int n_hypos, PgfTypeHypo *phypos, PgfText *pcat, int n_exprs, PgfExpr *pexprs)
 {	
 	JNIEnv *env;
-    (*cachedJVM)->AttachCurrentThread(cachedJVM, (void **)&env, NULL);
+    (*cachedJVM)->AttachCurrentThread(cachedJVM, (void**)&env, NULL);
 
 	jobject jhypos = pgf_type_hypos2j_hypo_list(env, n_hypos, phypos);
 	jstring cname = pgftext2jstring(env, pcat); 
@@ -146,6 +146,9 @@ match_expr(PgfMarshaller *this, PgfUnmarshaller *u, PgfExpr expr)
 static object
 match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
 {
+    JNIEnv *env;
+    (*cachedJVM)->AttachCurrentThread(cachedJVM, (void**)&env, NULL);
+
 	// convert PgfType to java Type
     jobject t = (jobject)ty;
 
@@ -153,9 +156,9 @@ match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
 	jclass tcls = (*env)->GetObjectClass(env, t); 
 
 	// convert Type.hypos (:: Hypo[]) to PgfTypeHypo*
-	jfieldID hid = (*env)->GetFieldID(env, tcls, "hypos", "[Lorg/grammaticalframework/pgf/Hypo");
-	jobject hypos = (*env)->GetObjectField(env, t, hid);
-	jsize n_hypos = (*env)->GetArrayLength(env,hypos);
+	jfieldID hid = (*env)->GetFieldID(env, tcls, "hypos", "[Lorg/grammaticalframework/pgf/Hypo"); //is NULL
+	jobjectArray hypos = (jobjectArray)(*env)->GetObjectField(env, t, hid);
+	jsize n_hypos = (*env)->GetArrayLength(env,hypos); // FAILS
 	PgfTypeHypo* phypos = j_hypo_list2pgf_type_hypos(env, n_hypos, hypos);
 	if (phypos == NULL) {
         return 0;
@@ -163,15 +166,16 @@ match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
 
 	// convert Type.cat (:: String) to C-style string
 	jfieldID cid = (*env)->GetFieldID(env, tcls, "cat", "Ljava/lang/String");
-	PgfText* pcat = jstring2pgftext(env, (*env)->GetObjectField(env, t, cid));
+	jstring cat = (jstring)(*env)->GetObjectField(env, t, cid);
+	PgfText* pcat = jstring2pgftext(env, cat); // ALSO FAILS
 	if (pcat == NULL) {
         return 0;
     }
 
 	// convert Type.exprs (:: Expr[]) to PgfExpr[]
-	jfieldID eid = (*env)->GetFieldID(env, tcls, "exprs", "[Lorg/grammaticalframework/pgf/Hypo");
-	jobject exprs = (*env)->GetObjectField(env, t, eid);
-	jsize n_exprs = (*env)->GetArrayLength(env,exprs); 
+	jfieldID eid = (*env)->GetFieldID(env, tcls, "exprs", "[Lorg/grammaticalframework/pgf/Expr");
+	jobjectArray exprs = (jobjectArray)(*env)->GetObjectField(env, t, eid);
+	jsize n_exprs = (*env)->GetArrayLength(env,exprs); // PROBABLY ALSO FAILS
 	PgfExpr pexprs[n_exprs];
 	for (jsize i = 0; i < n_exprs; i++) {
 		pexprs[i] = (PgfExpr)(*env)->GetObjectArrayElement(env, exprs, n_exprs);
