@@ -156,26 +156,26 @@ match_type(PgfMarshaller *this, PgfUnmarshaller *u, PgfType ty)
 	jclass tcls = (*env)->GetObjectClass(env, t); 
 
 	// convert Type.hypos (:: Hypo[]) to PgfTypeHypo*
-	jfieldID hid = (*env)->GetFieldID(env, tcls, "hypos", "[Lorg/grammaticalframework/pgf/Hypo"); //is NULL
+	jfieldID hid = (*env)->GetFieldID(env, tcls, "hypos", "[Lorg/grammaticalframework/pgf/Hypo;");
 	jobjectArray hypos = (jobjectArray)(*env)->GetObjectField(env, t, hid);
-	jsize n_hypos = (*env)->GetArrayLength(env,hypos); // FAILS
+	jsize n_hypos = (*env)->GetArrayLength(env,hypos);
 	PgfTypeHypo* phypos = j_hypo_list2pgf_type_hypos(env, n_hypos, hypos);
 	if (phypos == NULL) {
         return 0;
     }
 
 	// convert Type.cat (:: String) to C-style string
-	jfieldID cid = (*env)->GetFieldID(env, tcls, "cat", "Ljava/lang/String");
+	jfieldID cid = (*env)->GetFieldID(env, tcls, "cat", "Ljava/lang/String;");
 	jstring cat = (jstring)(*env)->GetObjectField(env, t, cid);
-	PgfText* pcat = jstring2pgftext(env, cat); // ALSO FAILS
+	PgfText* pcat = jstring2pgftext(env, cat);
 	if (pcat == NULL) {
         return 0;
     }
 
 	// convert Type.exprs (:: Expr[]) to PgfExpr[]
-	jfieldID eid = (*env)->GetFieldID(env, tcls, "exprs", "[Lorg/grammaticalframework/pgf/Expr");
+	jfieldID eid = (*env)->GetFieldID(env, tcls, "exprs", "[Lorg/grammaticalframework/pgf/Expr;");
 	jobjectArray exprs = (jobjectArray)(*env)->GetObjectField(env, t, eid);
-	jsize n_exprs = (*env)->GetArrayLength(env,exprs); // PROBABLY ALSO FAILS
+	jsize n_exprs = (*env)->GetArrayLength(env,exprs);
 	PgfExpr pexprs[n_exprs];
 	for (jsize i = 0; i < n_exprs; i++) {
 		pexprs[i] = (PgfExpr)(*env)->GetObjectArrayElement(env, exprs, n_exprs);
