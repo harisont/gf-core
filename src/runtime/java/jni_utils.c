@@ -183,13 +183,13 @@ j_hypo_list2pgf_type_hypos(JNIEnv *env, jsize n_hypos, jobject hypos)
 		phypos[i].bind_type = bt == JNI_TRUE ? PGF_BIND_TYPE_EXPLICIT : PGF_BIND_TYPE_IMPLICIT;
 
 		// h.var
-		jfieldID vid = (*env)->GetFieldID(env, hcls, "var", "Ljava/lang/String");
-		jobject v = (*env)->GetObjectField(env, h, vid);
+		jfieldID vid = (*env)->GetFieldID(env, hcls, "var", "Ljava/lang/String;");
+		jobject v = (*env)->GetObjectField(env, h, vid); // ALSO FAILS
 		phypos[i].cid = jstring2pgftext(env, v);
 
 		// h.type
-		jfieldID tid = (*env)->GetFieldID(env, hcls, "type", "Lorg/grammaticalframework/pgf/Type");
-		jobject t = (*env)->GetObjectField(env, h, tid);
+		jfieldID tid = (*env)->GetFieldID(env, hcls, "type", "Lorg/grammaticalframework/pgf/Type;");
+		jobject t = (*env)->GetObjectField(env, h, tid); // ALSO FAILS
 		phypos[i].type = (PgfType)t;
 	}
 
