@@ -435,13 +435,13 @@ public class TestBasic {
 
   @Test
   public void typeToString_N() {
-    assertEquals("N", new Type("N").toStringContext(new String[0]));
+    assertEquals("N", new Type("N").toString(new String[0]));
   }
 
   @Test
   public void typeToString_NullContext() {
     Type n = new Type("N");
-    assertEquals(n.toStringContext(new String[0]), n.toString());
+    assertEquals(n.toString(new String[0]), n.toString());
   }
 
   //@Test
