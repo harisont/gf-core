@@ -444,21 +444,21 @@ public class TestBasic {
     assertEquals(n.toString(new String[0]), n.toString());
   }
 
-  //@Test
-  //public void typeToString_NtoN() {
-  //  Hypo[] hypos = new Hypo[1];
-  //  hypos[0] = Hypo.mkHypo(new Type("N"));
-  //  assertEquals("N -> N", new Type(hypos, "N"));
-  //}
+  @Test
+  public void typeToString_NtoN() {
+    Hypo[] hypos = new Hypo[1];
+    hypos[0] = Hypo.mkHypo(new Type("N"));
+    assertEquals("N -> N", new Type(hypos, "N").toString());
+  }
 
-  //@Test
-  //public void typeToString_NtoNtoN() {
-  //  Hypo[] hypos = new Hypo[1];
-  //  Hypo[] hyposNested = new Hypo[1];
-  //  hyposNested[0] = Hypo.mkHypo(new Type("N"));
-  //  hypos[0] = Hypo.mkHypo(new Type(hyposNested, "N"));
-  //  assertEquals("(N -> N) -> N", new Type(hypos, "N"));
-  //}
+  @Test
+  public void typeToString_NtoNtoN() {
+    Hypo[] hypos = new Hypo[1];
+    Hypo[] hyposNested = new Hypo[1];
+    hyposNested[0] = Hypo.mkHypo(new Type("N"));
+    hypos[0] = Hypo.mkHypo(new Type(hyposNested, "N"));
+    assertEquals("(N -> N) -> N", new Type(hypos, "N").toString());
+  }
 
   //@Test
   //public void typeToString_xNtoPx() {
@@ -466,11 +466,10 @@ public class TestBasic {
   //  hypos[0] = Hypo.mkDepHypo("x", new Type("N"));
   //  Expr[] exprs = new Expr[1];
   //  exprs[0] = // TODO:
-  //  assertEquals("(x : N) -> P x", new Type(hypos, "P", exprs));
+  //  assertEquals("(x : N) -> P x", new Type(hypos, "P", exprs).toString());
   //}
 
-  // TODO: remaining toString tests from Python testsuite and new test for 
-  // version with no argument
+  // TODO: remaining toString tests from Python testsuite
 
   // readType
 
