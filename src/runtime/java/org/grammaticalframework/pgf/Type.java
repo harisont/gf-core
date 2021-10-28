@@ -70,14 +70,14 @@ public class Type {
 	 */
 	@Override
 	public String toString() {
-		return toString(new String[0]);
+		return toStringContext(new String[0]);
 	}
 
 	/**
 	 * Convert a `Type` to `String`.
 	 * @return The string equivalent of the Type.
 	 */
-	public native String toString(String[] vars);
+	public native String toStringContext(String[] vars);
 	
 	@Override
     public boolean equals(Object o) {

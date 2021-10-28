@@ -433,10 +433,16 @@ public class TestBasic {
 
   // toString
 
-  //@Test
-  //public void typeToString_N() {
-  //  assertEquals("N", new Type("N").toString());
-  //}
+  @Test
+  public void typeToString_N() {
+    assertEquals("N", new Type("N").toStringContext(new String[0]));
+  }
+
+  @Test
+  public void typeToString_NullContext() {
+    Type n = new Type("N");
+    assertEquals(n.toStringContext(new String[0]), n.toString());
+  }
 
   //@Test
   //public void typeToString_NtoN() {

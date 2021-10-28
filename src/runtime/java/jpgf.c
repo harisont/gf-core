@@ -545,7 +545,7 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 	return (jobject)t;
 }
 
-//JNIEXPORT jstring JNICALL
+//JNIEXPORT jstring JNICALL TODO: rm
 //Java_org_grammaticalframework_pgf_Type_toString___3Ljava_lang_String_2(JNIEnv* env, jobject self, jobjectArray vs)
 //{
 //	PgfType t = (PgfType)self;
@@ -558,6 +558,17 @@ Java_org_grammaticalframework_pgf_Type_readType(JNIEnv* env, jclass cls, jstring
 //	free(p);
 //	return s;
 //}
+
+JNIEXPORT jstring JNICALL
+Java_org_grammaticalframework_pgf_Type_toStringContext(JNIEnv* env, jobject self, jobjectArray ctx)
+{
+	// TODO: ctx conversion
+	PgfText *p = pgf_print_type((PgfType)self, NULL, 0, &marshaller); // TODO: replace NULL with converted ctx
+	// TODO: free converted ctx
+	jstring s = pgftext2jstring(env, p);
+	free(p);
+	return s;
+}
 
 /*
 static void
