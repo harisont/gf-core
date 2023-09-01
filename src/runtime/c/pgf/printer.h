@@ -18,14 +18,6 @@ class PGF_INTERNAL_DECL PgfPrinter : public PgfUnmarshaller {
     // of lambda expressions is finished.
     void flush_lambdas();
 
-    // Push a new variable in the printing context. If the name
-    // collides with an existing variable, the variable is renamed
-    // by adding a number.
-    void push_variable(PgfText *name);
-
-    // Pop the last variable name from the context.
-    void pop_variable();
-
     // The current operator priority
     int prio;
 
@@ -35,22 +27,59 @@ class PGF_INTERNAL_DECL PgfPrinter : public PgfUnmarshaller {
     // The marshaller for pattern matching
     PgfMarshaller *m;
 
+    void bindings(PgfPrintContext *context, size_t n_vars);
+
 public:
     PgfPrinter(PgfPrintContext *context, int priority,
                PgfMarshaller *marshaller);
+
+    ~PgfPrinter() { free(res); }
+
+    // Push a new variable in the printing context. If the name
+    // collides with an existing variable, the variable is renamed
+    // by adding a number.
+    void push_variable(PgfText *name);
+
+    // Pop the last variable name from the context.
+    void pop_variable();
 
     void puts(PgfText *s);
     void puts(const char *s);
 
     // buf_size is the expected buffer size. If larger is needed,
     // it will be allocated automatically.
+#if defined(_MSC_VER)
+#if _MSC_VER >= 1400
+# include <sal.h>
+# if _MSC_VER > 1400
+    void nprintf(size_t buf_size, _Printf_format_string_ const char *format, ...);
+# else
+    void nprintf(size_t buf_size, __format_string const char *format, ...);
+# endif /* FORMAT_STRING */
+#else
+    void nprintf(size_t buf_size, const char *format, ...);
+#endif /* _MSC_VER */
+#else
     void nprintf(size_t buf_size, const char *format, ...) __attribute__ ((format (printf, 3, 4)));
-
-    void print_name(PgfText *name);
+#endif
 
     PgfText *get_text();
 
+    void dump() {
+        PgfText *text = get_text();
+        fprintf(stderr, "%.*s", (int) text->size, text->text);
+        free(text);
+    };
+
     void hypo(PgfTypeHypo *hypo, int prio);
+
+    void parg(ref<PgfDTyp> ty, ref<PgfPArg> parg);
+    void lvar(size_t var);
+    void lparam(ref<PgfLParam> lparam);
+    void lvar_ranges(ref<Vector<PgfVariableRange>> vars);
+    void seq_id(PgfPhrasetableIds *seq_ids, ref<PgfSequence> seq);
+    void symbol(PgfSymbol sym);
+    void sequence(ref<PgfSequence> seq);
 
     virtual PgfExpr eabs(PgfBindType btype, PgfText *name, PgfExpr body);
     virtual PgfExpr eapp(PgfExpr fun, PgfExpr arg);
@@ -67,6 +96,10 @@ public:
                          PgfText *cat,
                          size_t n_exprs, PgfExpr *exprs);
     virtual void free_ref(object x);
+
+    void bindings(size_t n_vars) {
+        bindings(ctxt,n_vars);
+    }
 };
 
 #endif

@@ -28,25 +28,14 @@ import PGF2.Transactions(Symbol(..))
 -- Please change this every time when the GFO format is changed
 gfoVersion = "GF05"
 
-instance Binary Ident where
-  put id = put (ident2utf8 id)
-  get    = do bs <- get
-              if bs == BS.pack "_"
-                then return identW
-                else return (identC (rawIdentC bs))
-
-instance Binary ModuleName where
-  put (MN id) = put id
-  get = fmap MN get
-
 instance Binary Grammar where
   put = put . modules
   get = fmap mGrammar get
 
 instance Binary ModuleInfo where
-  put mi = do put (mtype mi,mstatus mi,mflags mi,mextend mi,mwith mi,mopens mi,mexdeps mi,msrc mi,jments mi)
-  get    = do (mtype,mstatus,mflags,mextend,mwith,mopens,med,msrc,jments) <- get
-              return (ModInfo mtype mstatus mflags mextend mwith mopens med msrc jments)
+  put mi = do put (mtype mi,mstatus mi,mflags mi,mextend mi,mwith mi,mopens mi,mexdeps mi,msrc mi,mseqs mi,jments mi)
+  get    = do (mtype,mstatus,mflags,mextend,mwith,mopens,med,msrc,mseqs,jments) <- get
+              return (ModInfo mtype mstatus mflags mextend mwith mopens med msrc mseqs jments)
 
 instance Binary ModuleType where
   put MTAbstract       = putWord8 0
@@ -103,13 +92,17 @@ instance Binary Options where
              toString (LInt n) = show n
              toString (LFlt d) = show d
 
-instance Binary PMCFGCat where
-  put (PMCFGCat r rs) = put (r,rs)
-  get = get >>= \(r,rs) -> return (PMCFGCat r rs)
+instance Binary LParam where
+  put (LParam r rs) = put (r,rs)
+  get = get >>= \(r,rs) -> return (LParam r rs)
 
-instance Binary PMCFGRule where
-  put (PMCFGRule res args rules) = put (res,args,rules)
-  get = get >>= \(res,args,rules) -> return (PMCFGRule res args rules)
+instance Binary PArg where
+  put (PArg x y) = put (x,y)
+  get = get >>= \(x,y) -> return (PArg x y)
+
+instance Binary Production where
+  put (Production ps args res rules) = put (ps,args,res,rules)
+  get = get >>= \(ps,args,res,rules) -> return (Production ps args res rules)
 
 instance Binary Info where
   put (AbsCat x)       = putWord8 0 >> put x
@@ -312,8 +305,8 @@ instance Binary Literal where
              _ -> decodingError
 
 instance Binary Symbol where
-  put (SymCat d r rs)    = putWord8 0 >> put (d,r,rs)
-  put (SymLit n l)       = putWord8 1 >> put (n,l)
+  put (SymCat d r)       = putWord8 0 >> put (d,r)
+  put (SymLit d r)       = putWord8 1 >> put (d,r)
   put (SymVar n l)       = putWord8 2 >> put (n,l)
   put (SymKS ts)         = putWord8 3 >> put ts
   put (SymKP d vs)       = putWord8 4 >> put (d,vs)
@@ -325,7 +318,7 @@ instance Binary Symbol where
   put SymALL_CAPIT       = putWord8 10
   get = do tag <- getWord8
            case tag of
-             0 -> liftM3 SymCat get get get
+             0 -> liftM2 SymCat get get
              1 -> liftM2 SymLit get get
              2 -> liftM2 SymVar get get
              3 -> liftM  SymKS  get
@@ -372,7 +365,7 @@ decodeModuleHeader :: MonadIO io => FilePath -> io (VersionTagged Module)
 decodeModuleHeader = liftIO . fmap (fmap conv) . decodeFile'
   where
     conv (m,mtype,mstatus,mflags,mextend,mwith,mopens,med,msrc) =
-        (m,ModInfo mtype mstatus mflags mextend mwith mopens med msrc Map.empty)
+        (m,ModInfo mtype mstatus mflags mextend mwith mopens med msrc Nothing Map.empty)
 
 encodeModule :: MonadIO io => FilePath -> SourceModule -> io ()
 encodeModule fpath mo = liftIO $ encodeFile fpath (Tagged mo)

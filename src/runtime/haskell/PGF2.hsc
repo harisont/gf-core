@@ -15,6 +15,7 @@
 
 module PGF2 (-- * PGF
              PGF,readPGF,bootNGF,readNGF,newNGF,writePGF,showPGF,
+             readPGFWithProbs, bootNGFWithProbs,
 
              -- * Abstract syntax
              AbsName,abstractName,globalFlag,abstractFlag,
@@ -23,13 +24,14 @@ module PGF2 (-- * PGF
              Cat,categories,categoryContext,categoryProbability,
 
              -- ** Functions
-             Fun, functions, functionsByCat,
+             Fun, functions, functionsByPrefix, functionsByCat,
              functionType, functionIsConstructor, functionProbability,
 
              -- ** Expressions
              Expr(..), Literal(..), showExpr, readExpr,
-             mkAbs,    unAbs,
+             mkAbs,    unAbs, Var,
              mkApp,    unApp, unapply,
+             mkVar,    unVar,
              mkStr,    unStr,
              mkInt,    unInt,
              mkDouble, unDouble,
@@ -40,20 +42,23 @@ module PGF2 (-- * PGF
 
              -- ** Types
              Type(..), Hypo, BindType(..), startCat,
-             readType, showType, showContext,
+             readType, showType, readContext, showContext,
              mkType, unType,
              mkHypo, mkDepHypo, mkImplHypo,
 
              -- ** Type checking
              -- | Dynamically-built expressions should always be type-checked before using in other functions,
              -- as the exceptions thrown by using invalid expressions may not catchable.
-             checkExpr, inferExpr, checkType,
+             checkExpr, inferExpr, checkType, checkContext,
 
              -- ** Computing
              compute,
 
              -- ** Generation
-             generateAll, generateAllFrom, generateRandom, generateRandomFrom,
+             generateAll, generateAllDepth, generateAllExt,
+             generateAllFrom, generateAllFromDepth, generateAllFromExt,
+             generateRandom, generateRandomDepth, generateRandomExt,
+             generateRandomFrom, generateRandomFromDepth, generateRandomFromExt,
 
              -- ** Morphological Analysis
              MorphoAnalysis, lookupMorpho, lookupCohorts, fullFormLexicon,
@@ -67,13 +72,13 @@ module PGF2 (-- * PGF
              graphvizWordAlignment,
 
              -- * Concrete syntax
-             ConcName,Concr,languages,concreteName,languageCode,
+             ConcName,Concr,languages,concreteName,languageCode,concreteFlag,
 
              -- ** Linearization
              linearize, linearizeAll, tabularLinearize, tabularLinearizeAll,
              FId, BracketedString(..), showBracketedString, flattenBracketedString,
              bracketedLinearize, bracketedLinearizeAll,
-             hasLinearization,
+             hasLinearization, categoryFields,
              printName, alignWords, gizaAlignment,
 
              -- ** Parsing
@@ -93,10 +98,10 @@ import PGF2.FFI
 
 import Foreign
 import Foreign.C
-import Control.Exception(mask_,bracket)
-import System.IO.Unsafe(unsafePerformIO)
+import Control.Monad(forM,forM_)
+import Control.Exception(bracket,mask_,throwIO)
+import System.IO.Unsafe(unsafePerformIO, unsafeInterleaveIO)
 import System.Random
-import qualified Foreign.Concurrent as C
 import qualified Data.Map as Map
 import Data.IORef
 import Data.List(intersperse,groupBy)
@@ -108,29 +113,55 @@ import Text.PrettyPrint
 
 -- | Reads a PGF file and keeps it in memory.
 readPGF :: FilePath -> IO PGF
-readPGF fpath =
+readPGF fpath = readPGFWithProbs fpath Nothing
+
+readPGFWithProbs :: FilePath -> Maybe (Map.Map String Double) -> IO PGF
+readPGFWithProbs fpath mb_probs =
   withCString fpath $ \c_fpath ->
   alloca $ \p_revision ->
+  withProbsCallback mb_probs $ \c_pcallback ->
   mask_ $ do
-    c_db <- withPgfExn "readPGF" (pgf_read_pgf c_fpath p_revision)
+    c_db <- withPgfExn "readPGF" (pgf_read_pgf c_fpath p_revision c_pcallback)
     c_revision <- peek p_revision
-    fptr <- C.newForeignPtr c_revision (pgf_free_revision c_db c_revision)
-    return (PGF c_db fptr Map.empty)
+    fptr <- newForeignPtrEnv pgf_free_revision c_db c_revision
+    langs <- getConcretes c_db fptr
+    return (PGF c_db fptr langs)
 
 -- | Reads a PGF file and stores the unpacked data in an NGF file
 -- ready to be shared with other process, or used for quick startup.
 -- The NGF file is platform dependent and should not be copied
 -- between machines.
 bootNGF :: FilePath -> FilePath -> IO PGF
-bootNGF pgf_path ngf_path =
+bootNGF pgf_path ngf_path = bootNGFWithProbs pgf_path Nothing ngf_path
+
+bootNGFWithProbs :: FilePath -> Maybe (Map.Map String Double) -> FilePath -> IO PGF
+bootNGFWithProbs pgf_path mb_probs ngf_path =
   withCString pgf_path $ \c_pgf_path ->
   withCString ngf_path $ \c_ngf_path ->
   alloca $ \p_revision ->
+  withProbsCallback mb_probs $ \c_pcallback ->
   mask_ $ do
-    c_db <- withPgfExn "bootNGF" (pgf_boot_ngf c_pgf_path c_ngf_path p_revision)
+    c_db <- withPgfExn "bootNGF" (pgf_boot_ngf c_pgf_path c_ngf_path p_revision c_pcallback)
     c_revision <- peek p_revision
-    fptr <- C.newForeignPtr c_revision (pgf_free_revision c_db c_revision)
-    return (PGF c_db fptr Map.empty)
+    fptr <- newForeignPtrEnv pgf_free_revision c_db c_revision
+    langs <- getConcretes c_db fptr
+    return (PGF c_db fptr langs)
+
+withProbsCallback :: Maybe (Map.Map String Double) -> (Ptr PgfProbsCallback -> IO a) -> IO a
+withProbsCallback Nothing      f = f nullPtr
+withProbsCallback (Just probs) f =
+  allocaBytes (#size PgfProbsCallback) $ \callback ->
+  bracket (wrapProbsCallback getProb) freeHaskellFunPtr $ \fptr -> do
+    (#poke PgfProbsCallback, fn) callback fptr
+    f callback
+  where
+    getProb _ c_name = do
+      name <- peekText c_name
+      case Map.lookup name probs of
+        Nothing -> return nan
+        Just p  -> return p
+
+    nan = log (-1)
 
 -- | Reads the grammar from an already booted NGF file.
 -- The function fails if the file does not exist.
@@ -141,40 +172,178 @@ readNGF fpath =
   mask_ $ do
     c_db <- withPgfExn "readNGF" (pgf_read_ngf c_fpath p_revision)
     c_revision <- peek p_revision
-    fptr <- C.newForeignPtr c_revision (pgf_free_revision c_db c_revision)
-    return (PGF c_db fptr Map.empty)
+    fptr <- newForeignPtrEnv pgf_free_revision c_db c_revision
+    langs <- getConcretes c_db fptr
+    return (PGF c_db fptr langs)
 
 -- | Creates a new NGF file with a grammar with the given abstract_name.
 -- Aside from the name, the grammar is otherwise empty but can be later
 -- populated with new functions and categories. If fpath is Nothing then
 -- the file is not stored on the disk but only in memory.
-newNGF :: AbsName -> Maybe FilePath -> IO PGF
-newNGF abs_name mb_fpath =
+newNGF :: AbsName -> Maybe FilePath -> Int -> IO PGF
+newNGF abs_name mb_fpath init_size =
   withText abs_name $ \c_abs_name ->
   maybe (\f -> f nullPtr) withCString mb_fpath $ \c_fpath ->
   alloca $ \p_revision ->
   mask_ $ do
-    c_db <- withPgfExn "newNGF" (pgf_new_ngf c_abs_name c_fpath p_revision)
+    c_db <- withPgfExn "newNGF" (pgf_new_ngf c_abs_name c_fpath (fromIntegral init_size) p_revision)
     c_revision <- peek p_revision
-    fptr <- C.newForeignPtr c_revision (pgf_free_revision c_db c_revision)
+    fptr <- newForeignPtrEnv pgf_free_revision c_db c_revision
     return (PGF c_db fptr Map.empty)
 
-writePGF :: FilePath -> PGF -> IO ()
-writePGF fpath p =
+writePGF :: FilePath -> PGF -> Maybe [ConcName] -> IO ()
+writePGF fpath p mb_langs =
   withCString fpath $ \c_fpath ->
-  withForeignPtr (revision p) $ \c_revision ->
-    withPgfExn "writePGF" (pgf_write_pgf c_fpath (a_db p) c_revision)
+  withForeignPtr (a_revision p) $ \c_revision ->
+  maybe (\f -> f nullPtr) (withLangs []) mb_langs $ \c_langs ->
+    withPgfExn "writePGF" (pgf_write_pgf c_fpath (a_db p) c_revision c_langs)
+  where
+    withLangs clangs []           f = withArray0 nullPtr (reverse clangs) f
+    withLangs clangs (lang:langs) f = withText lang $ \clang -> withLangs (clang:clangs) langs f
 
 showPGF :: PGF -> String
-showPGF = error "TODO: showPGF"
+showPGF p =
+  render (text "abstract" <+> ppAbstractName p <+> char '{' $$
+          nest 2 (ppStartCat p $$
+                  ppAbsCats p $$
+                  ppAbsFuns p) $$
+          char '}' $$
+          Map.foldrWithKey (\name concr doc -> ppConcr name concr $$ doc) empty (languages p))
+  where
+    ppStartCat p =
+      unsafePerformIO $
+      withForeignPtr (a_revision p) $ \c_revision -> do
+        c_text <- withPgfExn "showPGF" (pgf_print_start_cat_internal (a_db p) c_revision)
+        if c_text == nullPtr
+          then return empty
+          else do s <- peekText c_text
+                  return (text "flags" <+> text s)
+
+    ppAbstractName p =
+      unsafePerformIO $
+      withForeignPtr (a_revision p) $ \c_revision ->
+      bracket (withPgfExn "showPGF" (pgf_abstract_name (a_db p) c_revision)) free $ \c_text ->
+      bracket (pgf_print_ident c_text) free $ \c_text ->
+        fmap text (peekText c_text)
+
+    ppAbsCats p = unsafePerformIO $ do
+      ref <- newIORef empty
+      (allocaBytes (#size PgfItor) $ \itor ->
+       bracket (wrapItorCallback (getCategories ref)) freeHaskellFunPtr $ \fptr ->
+       withForeignPtr (a_revision p) $ \c_revision -> do
+         (#poke PgfItor, fn) itor fptr
+         withPgfExn "showPGF" (pgf_iter_categories (a_db p) c_revision itor))
+      readIORef ref
+      where
+        getCategories :: IORef Doc -> ItorCallback
+        getCategories ref itor key val exn = do
+          def <- bracket (pgf_print_category_internal val) free peekText
+          modifyIORef ref $ (\doc -> doc $$ text def)
+
+    ppAbsFuns p = unsafePerformIO $ do
+      ref <- newIORef empty
+      (allocaBytes (#size PgfItor) $ \itor ->
+       bracket (wrapItorCallback (getFunctions ref)) freeHaskellFunPtr $ \fptr ->
+       withForeignPtr (a_revision p) $ \c_revision -> do
+         (#poke PgfItor, fn) itor fptr
+         withPgfExn "showPGF" (pgf_iter_functions (a_db p) c_revision itor))
+      readIORef ref
+      where
+        getFunctions :: IORef Doc -> ItorCallback
+        getFunctions ref itor key val exn = do
+          def <- bracket (pgf_print_function_internal val) free peekText
+          modifyIORef ref (\doc -> doc $$ text def)
+
+    ppConcr name c = unsafePerformIO $ do
+      (seq_ids,doc3) <- prepareSequences c -- run first to update all seq_id
+      doc1 <- ppLincats seq_ids c
+      doc2 <- ppLins seq_ids c
+      pgf_release_phrasetable_ids seq_ids
+      return (text "concrete" <+> text name <+> char '{' $$
+              nest 2 (doc1 $$
+                      doc2 $$
+                      (text "sequences" <+> char '{' $$ 
+                       nest 2 doc3 $$ 
+                       char '}')) $$
+              char '}')
+
+    ppLincats seq_ids c = do
+      ref <- newIORef empty
+      (allocaBytes (#size PgfItor) $ \itor ->
+       bracket (wrapItorCallback (getLincats ref)) freeHaskellFunPtr $ \fptr ->
+       withForeignPtr (c_revision c) $ \c_revision -> do
+         (#poke PgfItor, fn) itor fptr
+         withPgfExn "showPGF" (pgf_iter_lincats (a_db p) c_revision itor))
+      readIORef ref
+      where
+        getLincats :: IORef Doc -> ItorCallback
+        getLincats ref itor key val exn = do
+          name   <- bracket (pgf_print_ident key) free $ \c_text -> do
+                      peekText c_text
+          (n_fields,n_lindefs,n_linrefs) <-
+                    allocaBytes (3*(#size size_t)) $ \pcounts -> do
+                      pgf_get_lincat_counts_internal val pcounts
+                      n_fields  <- peekElemOff pcounts 0
+                      n_lindefs <- peekElemOff pcounts 1
+                      n_linrefs <- peekElemOff pcounts 2
+                      return (n_fields,n_lindefs,n_linrefs)
+          fields <- forM (init [0..n_fields]) $ \i -> do
+                      pgf_get_lincat_field_internal val i >>= peekText
+          let def = text "lincat" <+> (text name <+> char '=' <+> char '[' $$
+                                       nest 2 (vcat (map (text.show) fields)) $$
+                                       char ']')
+          modifyIORef ref $ (\doc -> doc $$ def)
+          forM_ (init [0..n_lindefs]) $ \i -> do
+            def <- bracket (pgf_print_lindef_internal seq_ids val i) free $ \c_text -> do
+                     fmap text (peekText c_text)
+            modifyIORef ref (\doc -> doc $$ text "lindef" <+> def)
+          forM_ (init [0..n_linrefs]) $ \i -> do
+            def <- bracket (pgf_print_linref_internal seq_ids val i) free $ \c_text -> do
+                     fmap text (peekText c_text)
+            modifyIORef ref $ (\doc -> doc $$ text "linref" <+> def)
+
+    ppLins seq_ids c = do
+      ref <- newIORef empty
+      (allocaBytes (#size PgfItor) $ \itor ->
+       bracket (wrapItorCallback (getLins ref)) freeHaskellFunPtr $ \fptr ->
+       withForeignPtr (c_revision c) $ \c_revision -> do
+         (#poke PgfItor, fn) itor fptr
+         withPgfExn "showPGF" (pgf_iter_lins (a_db p) c_revision itor))
+      readIORef ref
+      where
+        getLins :: IORef Doc -> ItorCallback
+        getLins ref itor key val exn = do
+          n_prods <- pgf_get_lin_get_prod_count val
+          forM_ (init [0..n_prods]) $ \i -> do
+            def <- bracket (pgf_print_lin_internal seq_ids val i) free $ \c_text -> do
+                     fmap text (peekText c_text)
+            modifyIORef ref (\doc -> doc $$ text "lin" <+> def)
+            return ()
+
+    prepareSequences c = do
+      ref <- newIORef empty
+      seq_ids <- (allocaBytes (#size PgfSequenceItor) $ \itor ->
+                  bracket (wrapSequenceItorCallback (getSequences ref)) freeHaskellFunPtr $ \fptr ->
+                  withForeignPtr (c_revision c) $ \c_revision -> do
+                    (#poke PgfSequenceItor, fn) itor fptr
+                    withPgfExn "showPGF" (pgf_iter_sequences (a_db p) c_revision itor nullPtr))
+      doc <- readIORef ref
+      return (seq_ids, doc)
+      where
+        getSequences :: IORef Doc -> SequenceItorCallback
+        getSequences ref itor seq_id val exn = do
+          def <- bracket (pgf_print_sequence_internal seq_id val) free $ \c_text -> do
+                     fmap text (peekText c_text)
+          modifyIORef ref $ (\doc -> doc $$ def)
+          return 0
 
 -- | The abstract language name is the name of the top-level
 -- abstract module
 abstractName :: PGF -> AbsName
 abstractName p =
   unsafePerformIO $
-  withForeignPtr (revision p) $ \c_revision ->
-  bracket (withPgfExn "abstractName" (pgf_abstract_name (a_db p) c_revision)) free $ \c_text ->
+  withForeignPtr (a_revision p) $ \c_revision ->
+  bracket (withPgfExn "abstractName" (pgf_abstract_name (a_db p) c_revision)) free $ \c_text -> do
     peekText c_text
 
 -- | The start category is defined in the grammar with
@@ -185,9 +354,8 @@ abstractName p =
 startCat :: PGF -> Type
 startCat p =
   unsafePerformIO $
-  withForeignPtr unmarshaller $ \u ->
-  withForeignPtr (revision p) $ \c_revision -> do
-    c_typ <- withPgfExn "startCat" (pgf_start_cat (a_db p) c_revision u)
+  withForeignPtr (a_revision p) $ \c_revision -> do
+    c_typ <- withPgfExn "startCat" (pgf_start_cat (a_db p) c_revision unmarshaller)
     typ <- deRefStablePtr c_typ
     freeStablePtr c_typ
     return typ
@@ -196,10 +364,9 @@ startCat p =
 functionType :: PGF -> Fun -> Maybe Type
 functionType p fn =
   unsafePerformIO $
-  withForeignPtr unmarshaller $ \u ->
-  withForeignPtr (revision p) $ \c_revision ->
+  withForeignPtr (a_revision p) $ \c_revision ->
   withText fn $ \c_fn -> do
-    c_typ <- withPgfExn "functionType" (pgf_function_type (a_db p) c_revision c_fn u)
+    c_typ <- withPgfExn "functionType" (pgf_function_type (a_db p) c_revision c_fn unmarshaller)
     if c_typ == castPtrToStablePtr nullPtr
       then return Nothing
       else do typ <- deRefStablePtr c_typ
@@ -210,7 +377,7 @@ functionIsConstructor :: PGF -> Fun -> Bool
 functionIsConstructor p fun =
   unsafePerformIO $
   withText fun $ \c_fun ->
-  withForeignPtr (revision p) $ \c_revision ->
+  withForeignPtr (a_revision p) $ \c_revision ->
       do res <- withPgfExn "functionIsConstructor" (pgf_function_is_constructor (a_db p) c_revision c_fun)
          return (res /= 0)
 
@@ -218,16 +385,15 @@ functionProbability :: PGF -> Fun -> Float
 functionProbability p fun =
   unsafePerformIO $
   withText fun $ \c_fun ->
-  withForeignPtr (revision p) $ \c_revision ->
+  withForeignPtr (a_revision p) $ \c_revision ->
       withPgfExn "functionProbability" (pgf_function_prob (a_db p) c_revision c_fun)
 
 exprProbability :: PGF -> Expr -> Float
 exprProbability p e =
   unsafePerformIO $
-  withForeignPtr (revision p) $ \c_revision ->
+  withForeignPtr (a_revision p) $ \c_revision ->
   bracket (newStablePtr e) freeStablePtr $ \c_e ->
-  withForeignPtr marshaller $ \m ->
-    withPgfExn "exprProbability" (pgf_expr_prob (a_db p) c_revision c_e m)
+    withPgfExn "exprProbability" (pgf_expr_prob (a_db p) c_revision c_e marshaller)
 
 checkExpr :: PGF -> Expr -> Type -> Either String Expr
 checkExpr = error "TODO: checkExpr"
@@ -237,27 +403,108 @@ checkExpr = error "TODO: checkExpr"
 -- possible to infer its type in the GF type system.
 -- In this case the function returns an error.
 inferExpr :: PGF -> Expr -> Either String (Expr, Type)
-inferExpr = error "TODO: inferExpr"
+inferExpr p e =
+  unsafePerformIO $
+  withForeignPtr (a_revision p) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  alloca $ \p_e ->
+  allocaBytes (#size PgfExn) $ \c_exn -> do
+    poke p_e c_e
+    c_ty <- pgf_infer_expr (a_db p) c_revision p_e marshaller unmarshaller c_exn
+    ex_type <- (#peek PgfExn, type) c_exn :: IO (#type PgfExnType)
+    case ex_type of
+      (#const PGF_EXN_NONE) -> do
+         c_e <- peek p_e
+         e  <- deRefStablePtr c_e
+         freeStablePtr c_e
+         ty <- deRefStablePtr c_ty
+         freeStablePtr c_ty
+         return (Right (e,ty))
+      (#const PGF_EXN_SYSTEM_ERROR) -> do
+         errno <- (#peek PgfExn, code) c_exn
+         c_msg <- (#peek PgfExn, msg) c_exn
+         mb_fpath <- if c_msg == nullPtr
+                       then return Nothing
+                       else fmap Just (peekCString c_msg)
+         ioError (errnoToIOError "inferExpr" (Errno errno) Nothing mb_fpath)
+      (#const PGF_EXN_PGF_ERROR) -> do
+         c_msg <- (#peek PgfExn, msg) c_exn
+         msg <- peekCString c_msg
+         free c_msg
+         return (Left msg)
+      _ -> throwIO (PGFError "inferExpr" "An unidentified error occurred")
 
 -- | Check whether a type is consistent with the abstract
 -- syntax of the grammar.
 checkType :: PGF -> Type -> Either String Type
-checkType = error "TODO: checkType"
-  
+checkType pgf ty = Right ty
+
+-- | Check whether a context is consistent with the abstract
+-- syntax of the grammar.
+checkContext :: PGF -> [Hypo] -> Either String [Hypo]
+checkContext pgf ctxt = Right ctxt
+
 compute :: PGF -> Expr -> Expr
 compute = error "TODO: compute"
 
 concreteName :: Concr -> ConcName
-concreteName c = error "TODO: concreteName"
+concreteName c =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (withPgfExn "concreteName" (pgf_concrete_name (c_db c) c_revision)) free $ \c_text ->
+    peekText c_text
 
 languageCode :: Concr -> Maybe String
-languageCode c = error "TODO: languageCode"
+languageCode c =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (withPgfExn "languageCode" (pgf_concrete_language_code (c_db c) c_revision)) free $ \c_text ->
+    if c_text == nullPtr
+      then return Nothing
+      else fmap Just (peekText c_text)
+
+concreteFlag :: Concr -> String -> Maybe Literal
+concreteFlag c name =
+  unsafePerformIO $
+  withText name $ \c_name ->
+  withForeignPtr (c_revision c) $ \c_revision -> do
+    c_lit <- withPgfExn "concreteFlag" (pgf_get_concrete_flag (c_db c) c_revision c_name unmarshaller)
+    if c_lit == castPtrToStablePtr nullPtr
+      then return Nothing
+      else do lit <- deRefStablePtr c_lit
+              freeStablePtr c_lit
+              return (Just lit)
 
 printName :: Concr -> Fun -> Maybe String
-printName lang fun = error "TODO: printName"
+printName c fun =
+  unsafePerformIO $
+  withText fun $ \c_fun ->
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (withPgfExn "printName" (pgf_get_printname (c_db c) c_revision c_fun)) free $ \c_name -> do
+    if c_name /= nullPtr
+      then fmap Just $ peekText c_name
+      else return Nothing
 
 alignWords :: Concr -> Expr -> [(String, [Int])]
-alignWords = error "TODO: alignWords"
+alignWords c e = unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  alloca $ \p_n_phrases -> do
+    c_phrases <-  withPgfExn "alignWords" (pgf_align_words (c_db c) c_revision c_e nullPtr marshaller p_n_phrases)
+    n_phrases <- peek p_n_phrases
+    arr <- peekArray (fromIntegral n_phrases) c_phrases
+    free c_phrases
+    mapM peekAlignmentPhrase arr
+  where
+    peekAlignmentPhrase :: Ptr PgfAlignmentPhrase -> IO (String, [Int])
+    peekAlignmentPhrase ptr = do
+      c_phrase <- (#peek PgfAlignmentPhrase, phrase) ptr
+      phrase <- peekText c_phrase
+      n_fids <- (#peek PgfAlignmentPhrase, n_fids) ptr
+      (fids :: [CInt]) <- peekArray (fromIntegral (n_fids :: CSize)) (ptr `plusPtr` (#offset PgfAlignmentPhrase, fids))
+      free c_phrase
+      free ptr
+      return (phrase, map fromIntegral fids)
 
 gizaAlignment = error "TODO: gizaAlignment"
 
@@ -283,7 +530,15 @@ type MorphoAnalysis = (Fun,String,Float)
 -- a multiword expression. It then computes the list of all possible
 -- morphological analyses.
 lookupMorpho :: Concr -> String -> [MorphoAnalysis]
-lookupMorpho = error "TODO: lookupMorpho"
+lookupMorpho c sent = unsafePerformIO $ do
+  ref <- newIORef []
+  (withText sent $ \c_sent ->
+   allocaBytes (#size PgfMorphoCallback) $ \itor ->
+   bracket (wrapMorphoCallback (getMorphology ref)) freeHaskellFunPtr $ \fptr ->
+   withForeignPtr (c_revision c) $ \c_revision -> do
+     (#poke PgfMorphoCallback, fn) itor fptr
+     withPgfExn "lookupMorpho" (pgf_lookup_morpho (c_db c) c_revision c_sent itor))
+  fmap reverse (readIORef ref)
 
 -- | 'lookupCohorts' takes an arbitrary string an produces
 -- a list of all places where lexical items from the grammar have been
@@ -295,7 +550,33 @@ lookupMorpho = error "TODO: lookupMorpho"
 -- by the @end@ position. This can be used for instance if you want to
 -- filter only the longest matches.
 lookupCohorts :: Concr -> String -> [(Int,String,[MorphoAnalysis],Int)]
-lookupCohorts = error "TODO: lookupCohorts"
+lookupCohorts c sent = unsafePerformIO $ do
+  morpho_ref  <- newIORef []
+  cohorts_ref <- newIORef []
+  (withText sent $ \c_sent ->
+   allocaBytes (#size PgfCohortsCallback) $ \itor ->
+   bracket (wrapMorphoCallback (getMorphology morpho_ref)) freeHaskellFunPtr $ \morpho_fptr ->
+   bracket (wrapCohortsCallback (getCohorts morpho_ref cohorts_ref)) freeHaskellFunPtr $ \cohorts_fptr ->
+   withForeignPtr (c_revision c) $ \c_revision -> do
+     (#poke PgfCohortsCallback, morpho.fn) itor morpho_fptr
+     (#poke PgfCohortsCallback, fn) itor cohorts_fptr
+     withPgfExn "lookupCohorts" (pgf_lookup_cohorts (c_db c) c_revision c_sent itor))
+  fmap reverse (readIORef cohorts_ref)
+  where
+    getCohorts morpho_ref cohorts_ref _ start' end' exn = do
+      ans <- readIORef morpho_ref
+      let start = fromIntegral start'
+          end   = fromIntegral end'
+          word  = take (end-start) (drop start sent)
+      modifyIORef cohorts_ref ((:) (start, word, reverse ans, end))
+      writeIORef morpho_ref []
+
+getMorphology ref _ c_name c_field c_prob exn = do
+  name  <- peekText c_name
+  field <- peekText c_field
+  let prob = realToFrac c_prob
+      ann = (name,field,prob)
+  modifyIORef ref ((:) ann)
 
 filterBest :: [(Int,String,[MorphoAnalysis],Int)] -> [(Int,String,[MorphoAnalysis],Int)]
 filterBest ans =
@@ -368,7 +649,39 @@ unk w [] | any (not . isPunctuation) w = True
 unk _ _                                = False
 
 fullFormLexicon :: Concr -> [(String, [MorphoAnalysis])]
-fullFormLexicon lang = error "TODO: fullFormLexicon"
+fullFormLexicon c = unsafePerformIO $ do
+  ref <- newIORef []
+  (allocaBytes (#size PgfSequenceItor) $ \itor1 ->
+   bracket (wrapSequenceItorCallback (getSequences ref)) freeHaskellFunPtr $ \fptr1 ->
+   allocaBytes (#size PgfMorphoCallback) $ \itor2 ->
+   bracket (wrapMorphoCallback (getMorphology ref)) freeHaskellFunPtr $ \fptr2 ->
+   withForeignPtr (c_revision c) $ \c_revision -> do
+     (#poke PgfSequenceItor,   fn) itor1 fptr1
+     (#poke PgfMorphoCallback, fn) itor2 fptr2
+     seq_ids <- withPgfExn "fullFormLexicon" (pgf_iter_sequences (c_db c) c_revision itor1 itor2)
+     pgf_release_phrasetable_ids seq_ids)
+  fmap (reverse2 []) (readIORef ref)
+  where
+    getSequences ref _ seq_id val exn = do
+      bracket (pgf_sequence_get_text_internal val) free $ \c_text ->
+        if c_text == nullPtr
+          then return 1
+          else do form <- peekText c_text
+                  case form of
+                    [] -> return 1
+                    _  -> do modifyIORef ref $ (\lexicon -> (form, []) : lexicon)
+                             return 0
+
+    getMorphology ref _ c_name c_field c_prob exn = do
+      name  <- peekText c_name
+      field <- peekText c_field
+      let prob = realToFrac c_prob
+          ann = (name,field,prob)
+      modifyIORef ref (\((form,anns) : lexicon) -> (form,ann:anns) : lexicon)
+
+    reverse2 ys []           = ys
+    reverse2 ys ((x1,x2):xs) = reverse2 ((x1,reverse x2):ys) xs
+
 
 -- | This data type encodes the different outcomes which you could get from the parser.
 data ParseOutput a
@@ -379,7 +692,30 @@ data ParseOutput a
   | ParseIncomplete                -- ^ The sentence is not complete.
 
 parse :: Concr -> Type -> String -> ParseOutput [(Expr,Float)]
-parse lang ty sent = parseWithHeuristics lang ty sent (-1.0) []
+parse c ty sent =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr ty) freeStablePtr $ \c_ty ->
+  withText sent $ \c_sent -> do
+    c_enum <- withPgfExn "parse" (pgf_parse (c_db c) c_revision c_ty marshaller unmarshaller c_sent)
+    exprs <- enumerateExprs (c_db c) c_enum
+    return (ParseOk exprs)
+
+enumerateExprs c_db c_enum_ptr = do
+  c_enum <- newForeignPtr pgf_free_expr_enum c_enum_ptr
+  c_fetch <- (#peek PgfExprEnumVtbl, fetch) =<< (#peek PgfExprEnum, vtbl) c_enum_ptr
+  unsafeInterleaveIO (fetchLazy c_fetch c_enum)
+  where
+    fetchLazy c_fetch c_enum =
+      withForeignPtr c_enum $ \c_enum_ptr -> 
+      alloca $ \p_prob -> do
+        c_expr <- callFetch c_fetch c_enum_ptr c_db p_prob
+        if c_expr == castPtrToStablePtr nullPtr
+          then do return []
+          else do expr <- deRefStablePtr c_expr
+                  prob <- peek p_prob
+                  rest <- unsafeInterleaveIO (fetchLazy c_fetch c_enum)
+                  return ((expr,prob) : rest)
 
 parseWithHeuristics :: Concr      -- ^ the language with which we parse
                     -> Type       -- ^ the start category
@@ -408,26 +744,109 @@ complete = error "TODO: complete"
 
 -- | Returns True if there is a linearization defined for that function in that language
 hasLinearization :: Concr -> Fun -> Bool
-hasLinearization = error "TODO: linearize"
+hasLinearization c name =
+  unsafePerformIO $
+  withText name $ \c_name ->
+  withForeignPtr (c_revision c) $ \c_revision -> do
+    c_res <- withPgfExn "hasLinearization" (pgf_has_linearization (c_db c) c_revision c_name)
+    return (c_res /= 0)
+
+categoryFields :: Concr -> Cat -> Maybe [String]
+categoryFields c cat =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  withText cat $ \c_cat ->
+  alloca $ \p_n_fields ->
+  bracket (withPgfExn "categoryFields" (pgf_category_fields (c_db c) c_revision c_cat p_n_fields)) free $ \c_fields ->
+    if c_fields == nullPtr
+      then return Nothing
+      else do n_fields <- peek p_n_fields
+              fs <- peekFields n_fields c_fields
+              return (Just fs)
+  where
+    peekFields n_fields c_fields
+      | n_fields == 0 = return []
+      | otherwise     = do c_text <- peek c_fields
+                           f  <- peekText c_text
+                           free c_text
+                           fs <- peekFields (n_fields-1) (c_fields `plusPtr` (#size PgfText*))
+                           return (f:fs)
 
 -- | Linearizes an expression as a string in the language
 linearize :: Concr -> Expr -> String
-linearize lang e = error "TODO: linearize"
+linearize c e =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  bracket (withPgfExn "linearize" (pgf_linearize (c_db c) c_revision c_e nullPtr marshaller)) free $ \c_text ->
+    if c_text == nullPtr
+      then return ""
+      else peekText c_text
 
 -- | Generates all possible linearizations of an expression
 linearizeAll :: Concr -> Expr -> [String]
-linearizeAll lang e = error "TODO: linearizeAll"
+linearizeAll c e =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  alloca $ \p_n_fields ->
+  bracket (withPgfExn "linearizeAll" (pgf_linearize_all (c_db c) c_revision c_e nullPtr marshaller p_n_fields)) free $ \c_texts -> do
+    n_fields <- peek p_n_fields
+    peekTexts n_fields c_texts
+  where
+    peekTexts 0 c_texts = return []
+    peekTexts n c_texts = do
+      c_text <- peek c_texts
+      text <- peekText c_text
+      free c_text
+      texts <- peekTexts (n-1) (c_texts `plusPtr` (#size PgfText*))
+      return (text:texts)
 
 -- | Generates a table of linearizations for an expression
 tabularLinearize :: Concr -> Expr -> [(String, String)]
-tabularLinearize lang e =
-  case tabularLinearizeAll lang e of
-    (lins:_) -> lins
-    _        -> []
+tabularLinearize c e =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  bracket (withPgfExn "tabularLinearize" (pgf_tabular_linearize (c_db c) c_revision c_e nullPtr marshaller)) free $ \c_texts -> do
+    if c_texts == nullPtr
+      then return []
+      else peekTable c_texts
+  where
+    peekTable c_texts = do
+      c_field <- peekElemOff c_texts 0
+      c_lin   <- peekElemOff c_texts 1
+      if c_field == nullPtr && c_lin == nullPtr
+        then return []
+        else do field <- peekText c_field
+                free c_field
+                lin   <- peekText c_lin
+                free c_lin
+                table <- peekTable (c_texts `plusPtr` (2*(#size PgfText*)))
+                return ((field,lin):table)
 
 -- | Generates a table of linearizations for an expression
 tabularLinearizeAll :: Concr -> Expr -> [[(String, String)]]
-tabularLinearizeAll lang e = error "TODO: tabularLinearizeAll"
+tabularLinearizeAll c e =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  bracket (withPgfExn "tabularLinearizeAll" (pgf_tabular_linearize_all (c_db c) c_revision c_e nullPtr marshaller)) free peekTables
+  where
+    peekTables c_texts = do
+      c_field <- peekElemOff c_texts 0
+      c_lin   <- peekElemOff c_texts 1
+      if c_field == nullPtr && c_lin == nullPtr
+        then return [[]]
+        else if c_field == nullPtr
+               then do tables <- peekTables (c_texts `plusPtr` (#size PgfText*))
+                       return ([]:tables)
+               else do field <- peekText c_field
+                       free c_field
+                       lin   <- peekText c_lin
+                       free c_lin
+                       (table:tables) <- peekTables (c_texts `plusPtr` (2*(#size PgfText*)))
+                       return (((field,lin):table):tables)
 
 type FId = Int
 
@@ -468,22 +887,206 @@ flattenBracketedString (Leaf w)              = [w]
 flattenBracketedString (Bracket _ _ _ _ bss) = concatMap flattenBracketedString bss
 
 bracketedLinearize :: Concr -> Expr -> [BracketedString]
-bracketedLinearize = error "TODO: bracketedLinearize"
+bracketedLinearize c e = unsafePerformIO $ do
+  ref <- newIORef (False,[],[])
+  (withForeignPtr (c_revision c) $ \c_revision ->
+   bracket (newStablePtr e) freeStablePtr $ \c_e ->
+   allocaBytes (#size PgfLinearizationOutputIface) $ \c_out ->
+   allocaBytes (#size PgfLinearizationOutputIfaceVtbl) $ \vtbl ->
+   bracket (wrapSymbol1 (symbol_token ref)) freeHaskellFunPtr $ \c_symbol_token ->
+   bracket (wrapSymbol2 (begin_phrase ref)) freeHaskellFunPtr $ \c_begin_phrase ->
+   bracket (wrapSymbol2 (end_phrase ref)) freeHaskellFunPtr $ \c_end_phrase ->
+   bracket (wrapSymbol0 (symbol_bind ref)) freeHaskellFunPtr $ \c_symbol_bind ->
+   bracket (wrapSymbol0 (symbol_ne ref)) freeHaskellFunPtr $ \c_symbol_ne -> do
+   bracket (wrapSymbol0 (flush ref)) freeHaskellFunPtr $ \c_flush -> do
+     (#poke PgfLinearizationOutputIfaceVtbl, symbol_token) vtbl c_symbol_token
+     (#poke PgfLinearizationOutputIfaceVtbl, begin_phrase) vtbl c_begin_phrase
+     (#poke PgfLinearizationOutputIfaceVtbl, end_phrase) vtbl c_end_phrase
+     (#poke PgfLinearizationOutputIfaceVtbl, symbol_bind) vtbl c_symbol_bind
+     (#poke PgfLinearizationOutputIfaceVtbl, symbol_ne) vtbl c_symbol_ne
+     (#poke PgfLinearizationOutputIfaceVtbl, flush) vtbl c_flush
+     (#poke PgfLinearizationOutputIface, vtbl) c_out vtbl
+     withPgfExn "bracketedLinearize" (pgf_bracketed_linearize (c_db c) c_revision c_e nullPtr marshaller c_out))
+  (ne,_,bs) <- readIORef ref
+  (if ne
+     then return []
+     else return (reverse bs))
+  where
+    symbol_token ref _ c_text = do
+      (ne,stack,bs) <- readIORef ref
+      token <- peekText c_text
+      writeIORef ref (ne,stack,Leaf token : bs)
+
+    begin_phrase ref _ c_cat c_fid c_ann c_fun = do
+      (ne,stack,bs) <- readIORef ref
+      writeIORef ref (ne,bs:stack,[])
+
+    end_phrase ref _ c_cat c_fid c_ann c_fun = do
+      (ne,bs':stack,bs) <- readIORef ref
+      if null bs
+        then writeIORef ref (ne,stack, bs')
+        else do cat <- peekText c_cat
+                let fid = fromIntegral c_fid
+                ann <- peekText c_ann
+                fun <- peekText c_fun
+                writeIORef ref (ne,stack,Bracket cat fid ann fun (reverse bs) : bs')
+
+    symbol_bind ref _ = do
+      (ne,stack,bs) <- readIORef ref
+      writeIORef ref (ne,stack,BIND : bs)
+
+    symbol_ne ref _ = do
+      (ne,stack,bs) <- readIORef ref
+      writeIORef ref (True,stack,bs)
+
+    flush _ _ = return ()
 
 bracketedLinearizeAll :: Concr -> Expr -> [[BracketedString]]
-bracketedLinearizeAll = error "TODO: bracketedLinearizeAll"
+bracketedLinearizeAll c e = unsafePerformIO $ do
+  ref <- newIORef (False,[],[],[])
+  (withForeignPtr (c_revision c) $ \c_revision ->
+   bracket (newStablePtr e) freeStablePtr $ \c_e ->
+   allocaBytes (#size PgfLinearizationOutputIface) $ \c_out ->
+   allocaBytes (#size PgfLinearizationOutputIfaceVtbl) $ \vtbl ->
+   bracket (wrapSymbol1 (symbol_token ref)) freeHaskellFunPtr $ \c_symbol_token ->
+   bracket (wrapSymbol2 (begin_phrase ref)) freeHaskellFunPtr $ \c_begin_phrase ->
+   bracket (wrapSymbol2 (end_phrase ref)) freeHaskellFunPtr $ \c_end_phrase ->
+   bracket (wrapSymbol0 (symbol_bind ref)) freeHaskellFunPtr $ \c_symbol_bind ->
+   bracket (wrapSymbol0 (symbol_ne ref)) freeHaskellFunPtr $ \c_symbol_ne -> do
+   bracket (wrapSymbol0 (flush ref)) freeHaskellFunPtr $ \c_flush -> do
+     (#poke PgfLinearizationOutputIfaceVtbl, symbol_token) vtbl c_symbol_token
+     (#poke PgfLinearizationOutputIfaceVtbl, begin_phrase) vtbl c_begin_phrase
+     (#poke PgfLinearizationOutputIfaceVtbl, end_phrase) vtbl c_end_phrase
+     (#poke PgfLinearizationOutputIfaceVtbl, symbol_bind) vtbl c_symbol_bind
+     (#poke PgfLinearizationOutputIfaceVtbl, symbol_ne) vtbl c_symbol_ne
+     (#poke PgfLinearizationOutputIfaceVtbl, flush) vtbl c_flush
+     (#poke PgfLinearizationOutputIface, vtbl) c_out vtbl
+     withPgfExn "bracketedLinearizeAll" (pgf_bracketed_linearize_all (c_db c) c_revision c_e nullPtr marshaller c_out))
+  (_,_,_,all) <- readIORef ref
+  return all
+  where
+    symbol_token ref _ c_text = do
+      (ne,stack,bs,all) <- readIORef ref
+      token <- peekText c_text
+      writeIORef ref (ne,stack,Leaf token : bs,all)
+
+    begin_phrase ref _ c_cat c_fid c_ann c_fun = do
+      (ne,stack,bs,all) <- readIORef ref
+      writeIORef ref (ne,bs:stack,[],all)
+
+    end_phrase ref _ c_cat c_fid c_ann c_fun = do
+      (ne,bs':stack,bs,all) <- readIORef ref
+      if null bs
+        then writeIORef ref (ne,stack,bs',all)
+        else do cat <- peekText c_cat
+                let fid = fromIntegral c_fid
+                ann <- peekText c_ann
+                fun <- peekText c_fun
+                writeIORef ref (ne,stack,Bracket cat fid ann fun (reverse bs) : bs',all)
+
+    symbol_bind ref _ = do
+      (ne,stack,bs,all) <- readIORef ref
+      writeIORef ref (ne,stack,BIND : bs,all)
+
+    symbol_ne ref _ = do
+      (ne,stack,bs,all) <- readIORef ref
+      writeIORef ref (True,[],[],all)
+
+    flush ref _ = do
+      (ne,_,bs,all) <- readIORef ref
+      if ne
+        then writeIORef ref (False,[],[],all)
+        else writeIORef ref (False,[],[],reverse bs:all)
 
 generateAll :: PGF -> Type -> [(Expr,Float)]
-generateAll p ty = error "TODO: generateAll"
+generateAll p ty = generateAllExt p ty maxBound []
+
+generateAllDepth :: PGF -> Type -> Int -> [(Expr,Float)]
+generateAllDepth p ty dp = generateAllExt p ty dp []
+
+generateAllExt :: PGF -> Type -> Int -> [Concr] -> [(Expr,Float)]
+generateAllExt p ty dp cs
+  | dp <= 0   = []
+  | otherwise = 
+      unsafePerformIO $
+      bracket (newStablePtr ty) freeStablePtr $ \c_ty ->
+      withForeignPtr (a_revision p) $ \a_revision ->
+      withPgfConcrs cs $ \c_db c_revisions n_revisions ->
+      mask_ $ do
+        c_enum <- withPgfExn "generateAllExt" (pgf_generate_all (a_db p) a_revision c_revisions n_revisions c_ty (fromIntegral dp) marshaller unmarshaller)
+        enumerateExprs (a_db p) c_enum
 
 generateAllFrom :: PGF -> Expr -> [(Expr,Float)]
-generateAllFrom p ty = error "TODO: generateAllFrom"
+generateAllFrom p ty = generateAllFromExt p ty maxBound []
 
-generateRandom :: StdGen -> PGF -> Type -> [a]
-generateRandom = error "TODO: generateRandom"
+generateAllFromDepth :: PGF -> Expr -> Int -> [(Expr,Float)]
+generateAllFromDepth p ty dp = generateAllFromExt p ty dp []
 
-generateRandomFrom :: StdGen -> PGF -> Expr -> [a]
-generateRandomFrom = error "TODO: generateRandomFrom"
+generateAllFromExt :: PGF -> Expr -> Int -> [Concr] -> [(Expr,Float)]
+generateAllFromExt p ty dp concrs = error "TODO: generateAllFromEx"
+
+-- | Generates a potentially infinite list of random 
+-- abstract syntax expressions. This is usefull for tree bank generation
+-- which after that can be used for grammar testing.
+generateRandom :: RandomGen g => g -> PGF -> Type -> [(Expr,Float)]
+generateRandom g pgf ty = generateRandomExt g pgf ty maxBound []
+
+generateRandomDepth :: RandomGen g => g -> PGF -> Type -> Int -> [(Expr,Float)]
+generateRandomDepth g p ty dp = generateRandomExt g p ty dp []
+
+generateRandomExt :: RandomGen g => g -> PGF -> Type -> Int -> [Concr] -> [(Expr,Float)]
+generateRandomExt g p ty dp cs
+  | dp <= 0   = []
+  | otherwise = let (seed,_) = random g
+                in generate seed
+  where
+    generate seed =
+      unsafePerformIO $
+      bracket (newStablePtr ty) freeStablePtr $ \c_ty ->
+      withForeignPtr (a_revision p) $ \a_revision ->
+      withPgfConcrs cs $ \c_db c_revisions n_revisions ->
+      alloca $ \p_seed ->
+      alloca $ \p_prob ->
+      mask_ $ do
+        poke p_seed seed
+        c_expr <- withPgfExn "generateRandomExt" (pgf_generate_random (a_db p) a_revision c_revisions n_revisions c_ty (fromIntegral dp) p_seed p_prob marshaller unmarshaller)
+        if castStablePtrToPtr c_expr == nullPtr
+          then return []
+          else do expr <- deRefStablePtr c_expr
+                  freeStablePtr c_expr
+                  seed <- peek p_seed
+                  prob <- peek p_prob
+                  return ((expr,prob):generate seed)
+
+generateRandomFrom :: RandomGen g => g -> PGF -> Expr -> [(Expr,Float)]
+generateRandomFrom g p e = generateRandomFromExt g p e maxBound []
+
+generateRandomFromDepth :: RandomGen g => g -> PGF -> Expr -> Int -> [(Expr,Float)]
+generateRandomFromDepth g p e dp = generateRandomFromExt g p e dp []
+
+generateRandomFromExt :: RandomGen g => g -> PGF -> Expr -> Int -> [Concr] -> [(Expr,Float)]
+generateRandomFromExt g p e dp cs
+  | dp <= 0   = []
+  | otherwise = let (seed,_) = random g
+                in generate seed
+  where
+    generate seed =
+      unsafePerformIO $
+      bracket (newStablePtr e) freeStablePtr $ \c_e ->
+      withForeignPtr (a_revision p) $ \a_revision ->
+      withPgfConcrs cs $ \c_db c_revisions n_revisions ->
+      alloca $ \p_seed ->
+      alloca $ \p_prob ->
+      mask_ $ do
+        poke p_seed seed
+        c_expr <- withPgfExn "generateRandomFromExt" (pgf_generate_random_from (a_db p) a_revision c_revisions n_revisions c_e (fromIntegral dp) p_seed p_prob marshaller unmarshaller)
+        if castStablePtrToPtr c_expr == nullPtr
+          then return []
+          else do expr <- deRefStablePtr c_expr
+                  freeStablePtr c_expr
+                  seed <- peek p_seed
+                  prob <- peek p_prob
+                  return ((expr,prob):generate seed)
 
 -- | List of all functions defined in the abstract syntax
 categories :: PGF -> [Cat]
@@ -492,14 +1095,14 @@ categories p =
     ref <- newIORef []
     (allocaBytes (#size PgfItor) $ \itor ->
      bracket (wrapItorCallback (getCategories ref)) freeHaskellFunPtr $ \fptr ->
-     withForeignPtr (revision p) $ \c_revision -> do
+     withForeignPtr (a_revision p) $ \c_revision -> do
       (#poke PgfItor, fn) itor fptr
       withPgfExn "categories" (pgf_iter_categories (a_db p) c_revision itor)
       cs <- readIORef ref
       return (reverse cs))
   where
     getCategories :: IORef [String] -> ItorCallback
-    getCategories ref itor key exn = do
+    getCategories ref itor key _ exn = do
       names <- readIORef ref
       name  <- peekText key
       writeIORef ref $ (name : names)
@@ -509,10 +1112,9 @@ categoryContext p cat =
   unsafePerformIO $
   withText cat $ \c_cat ->
   alloca $ \p_n_hypos ->
-  withForeignPtr unmarshaller $ \u ->
-  withForeignPtr (revision p) $ \c_revision ->
+  withForeignPtr (a_revision p) $ \c_revision ->
   mask_ $ do
-    c_hypos <- withPgfExn "categoryContext" (pgf_category_context (a_db p) c_revision c_cat p_n_hypos u)
+    c_hypos <- withPgfExn "categoryContext" (pgf_category_context (a_db p) c_revision c_cat p_n_hypos unmarshaller)
     if c_hypos == nullPtr
       then return Nothing
       else do n_hypos <- peek p_n_hypos
@@ -537,7 +1139,7 @@ categoryProbability :: PGF -> Cat -> Float
 categoryProbability p cat =
   unsafePerformIO $
   withText cat $ \c_cat ->
-  withForeignPtr (revision p) $ \c_revision ->
+  withForeignPtr (a_revision p) $ \c_revision ->
       withPgfExn "categoryProbability" (pgf_category_prob (a_db p) c_revision c_cat)
 
 -- | List of all functions defined in the abstract syntax
@@ -547,14 +1149,34 @@ functions p =
     ref <- newIORef []
     (allocaBytes (#size PgfItor) $ \itor ->
      bracket (wrapItorCallback (getFunctions ref)) freeHaskellFunPtr $ \fptr ->
-     withForeignPtr (revision p) $ \c_revision -> do
+     withForeignPtr (a_revision p) $ \c_revision -> do
       (#poke PgfItor, fn) itor fptr
       withPgfExn "functions" (pgf_iter_functions (a_db p) c_revision itor)
       fs <- readIORef ref
       return (reverse fs))
   where
     getFunctions :: IORef [String] -> ItorCallback
-    getFunctions ref itor key exn = do
+    getFunctions ref itor key _ exn = do
+      names <- readIORef ref
+      name  <- peekText key
+      writeIORef ref $ (name : names)
+
+-- | List of all functions whose names start with a given prefix
+functionsByPrefix :: PGF -> String -> [Fun]
+functionsByPrefix p prefix =
+  unsafePerformIO $ do
+    ref <- newIORef []
+    (withText prefix $ \c_prefix ->
+     allocaBytes (#size PgfItor) $ \itor ->
+     bracket (wrapItorCallback (getFunctions ref)) freeHaskellFunPtr $ \fptr ->
+     withForeignPtr (a_revision p) $ \c_revision -> do
+      (#poke PgfItor, fn) itor fptr
+      withPgfExn "functions" (pgf_iter_functions_by_prefix (a_db p) c_revision c_prefix itor)
+      fs <- readIORef ref
+      return (reverse fs))
+  where
+    getFunctions :: IORef [String] -> ItorCallback
+    getFunctions ref itor key _ exn = do
       names <- readIORef ref
       name  <- peekText key
       writeIORef ref $ (name : names)
@@ -567,14 +1189,14 @@ functionsByCat p cat =
     (withText cat $ \c_cat ->
      allocaBytes (#size PgfItor) $ \itor ->
      bracket (wrapItorCallback (getFunctions ref)) freeHaskellFunPtr $ \fptr ->
-     withForeignPtr (revision p) $ \c_revision -> do
+     withForeignPtr (a_revision p) $ \c_revision -> do
       (#poke PgfItor, fn) itor fptr
       withPgfExn "functionsByCat" (pgf_iter_functions_by_cat (a_db p) c_revision c_cat itor)
       fs <- readIORef ref
       return (reverse fs))
   where
     getFunctions :: IORef [String] -> ItorCallback
-    getFunctions ref itor key exn = do
+    getFunctions ref itor key _ exn = do
       names <- readIORef ref
       name  <- peekText key
       writeIORef ref $ (name : names)
@@ -583,9 +1205,8 @@ globalFlag :: PGF -> String -> Maybe Literal
 globalFlag p name =
   unsafePerformIO $
   withText name $ \c_name ->
-  withForeignPtr (revision p) $ \c_revision ->
-  withForeignPtr unmarshaller $ \u -> do
-    c_lit <- withPgfExn "globalFlag" (pgf_get_global_flag (a_db p) c_revision c_name u)
+  withForeignPtr (a_revision p) $ \c_revision -> do
+    c_lit <- withPgfExn "globalFlag" (pgf_get_global_flag (a_db p) c_revision c_name unmarshaller)
     if c_lit == castPtrToStablePtr nullPtr
       then return Nothing
       else do lit <- deRefStablePtr c_lit
@@ -596,9 +1217,8 @@ abstractFlag :: PGF -> String -> Maybe Literal
 abstractFlag p name =
   unsafePerformIO $
   withText name $ \c_name ->
-  withForeignPtr (revision p) $ \c_revision ->
-  withForeignPtr unmarshaller $ \u -> do
-    c_lit <- withPgfExn "abstractFlag" (pgf_get_abstract_flag (a_db p) c_revision c_name u)
+  withForeignPtr (a_revision p) $ \c_revision -> do
+    c_lit <- withPgfExn "abstractFlag" (pgf_get_abstract_flag (a_db p) c_revision c_name unmarshaller)
     if c_lit == castPtrToStablePtr nullPtr
       then return Nothing
       else do lit <- deRefStablePtr c_lit
@@ -622,16 +1242,59 @@ data GraphvizOptions = GraphvizOptions {noLeaves :: Bool,
 
 graphvizDefaults = GraphvizOptions False False False True "" "" "" "" "" ""
 
+withGraphvizOptions :: GraphvizOptions -> (Ptr PgfGraphvizOptions -> IO a) -> IO a
+withGraphvizOptions opts f =
+  allocaBytes (#size PgfGraphvizOptions) $ \c_opts ->
+  withCString (nodeFont opts) $ \c_nodeFont ->
+  withCString (leafFont opts) $ \c_leafFont ->
+  withCString (nodeColor opts) $ \c_nodeColor ->
+  withCString (leafColor opts) $ \c_leafColor ->
+  withCString (nodeEdgeStyle opts) $ \c_nodeEdgeStyle ->
+  withCString (leafEdgeStyle opts) $ \c_leafEdgeStyle -> do
+    (#poke PgfGraphvizOptions, noLeaves) c_opts (if noLeaves opts then 1 else 0 :: CInt)
+    (#poke PgfGraphvizOptions, noFun)    c_opts (if noFun    opts then 1 else 0 :: CInt)
+    (#poke PgfGraphvizOptions, noCat)    c_opts (if noCat    opts then 1 else 0 :: CInt)
+    (#poke PgfGraphvizOptions, noDep)    c_opts (if noDep    opts then 1 else 0 :: CInt)
+    (#poke PgfGraphvizOptions, nodeFont) c_opts c_nodeFont
+    (#poke PgfGraphvizOptions, leafFont) c_opts c_leafFont
+    (#poke PgfGraphvizOptions, nodeColor) c_opts c_nodeColor
+    (#poke PgfGraphvizOptions, leafColor) c_opts c_leafColor
+    (#poke PgfGraphvizOptions, nodeEdgeStyle) c_opts c_nodeEdgeStyle
+    (#poke PgfGraphvizOptions, leafEdgeStyle) c_opts c_leafEdgeStyle
+    f c_opts
+
 -- | Renders an abstract syntax tree in a Graphviz format.
 graphvizAbstractTree :: PGF -> GraphvizOptions -> Expr -> String
-graphvizAbstractTree p opts e = error "TODO: graphvizAbstractTree"
+graphvizAbstractTree p opts e =
+  unsafePerformIO $
+  withForeignPtr (a_revision p) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  withGraphvizOptions opts $ \c_opts ->
+  bracket (withPgfExn "graphvizAbstractTree" (pgf_graphviz_abstract_tree (a_db p) c_revision c_e marshaller c_opts)) free $ \c_text ->
+    peekText c_text
 
 graphvizParseTree :: Concr -> GraphvizOptions -> Expr -> String
-graphvizParseTree c opts e = error "TODO: graphvizParseTree"
+graphvizParseTree c opts e =
+  unsafePerformIO $
+  withForeignPtr (c_revision c) $ \c_revision ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  withGraphvizOptions opts $ \c_opts ->
+  bracket (withPgfExn "graphvizParseTree" (pgf_graphviz_parse_tree  (c_db c) c_revision c_e nullPtr marshaller c_opts)) free $ \c_text ->
+    if c_text == nullPtr
+      then return ""
+      else peekText c_text
 
 graphvizWordAlignment :: [Concr] -> GraphvizOptions -> Expr -> String
-graphvizWordAlignment cs opts e = error "TODO: graphvizWordAlignment"
-
+graphvizWordAlignment [] opts e = ""
+graphvizWordAlignment cs opts e =
+  unsafePerformIO $
+  withPgfConcrs cs $ \c_db c_revisions n_revisions ->
+  bracket (newStablePtr e) freeStablePtr $ \c_e ->
+  withGraphvizOptions opts $ \c_opts ->
+  bracket (withPgfExn "graphvizWordAlignment" (pgf_graphviz_word_alignment c_db c_revisions n_revisions c_e nullPtr marshaller c_opts)) free $ \c_text ->
+    if c_text == nullPtr
+      then return ""
+      else peekText c_text
 
 type Labels = Map.Map Fun [String]
 
@@ -865,10 +1528,9 @@ printCoNLL = unlines . map (concat . intersperse "\t")
 showExpr :: [Var] -> Expr -> String
 showExpr scope e =
   unsafePerformIO $
-  withForeignPtr marshaller $ \m ->
   bracket (newPrintCtxt scope) freePrintCtxt $ \pctxt ->
   bracket (newStablePtr e) freeStablePtr $ \c_e ->
-  bracket (pgf_print_expr c_e pctxt 1 m) free $ \c_text ->
+  bracket (pgf_print_expr c_e pctxt 1 marshaller) free $ \c_text ->
     peekText c_text
 
 newPrintCtxt :: [Var] -> IO (Ptr PgfPrintContext)
@@ -890,9 +1552,8 @@ readExpr :: String -> Maybe Expr
 readExpr str =
   unsafePerformIO $
   withText str $ \c_str ->
-  withForeignPtr unmarshaller $ \u ->
   mask_ $ do
-    c_expr <- pgf_read_expr c_str u
+    c_expr <- pgf_read_expr c_str unmarshaller
     if c_expr == castPtrToStablePtr nullPtr
       then return Nothing
       else do expr <- deRefStablePtr c_expr
@@ -906,10 +1567,9 @@ readExpr str =
 showType :: [Var] -> Type -> String
 showType scope ty =
   unsafePerformIO $
-  withForeignPtr marshaller $ \m ->
   bracket (newPrintCtxt scope) freePrintCtxt $ \pctxt ->
   bracket (newStablePtr ty) freeStablePtr $ \c_ty ->
-  bracket (pgf_print_type c_ty pctxt 0 m) free $ \c_text ->
+  bracket (pgf_print_type c_ty pctxt 0 marshaller) free $ \c_text ->
     peekText c_text
 
 showContext :: [Var] -> [(BindType,Var,Type)] -> String
@@ -917,22 +1577,51 @@ showContext scope hypos =
   unsafePerformIO $
   withHypos hypos $ \n_hypos c_hypos ->
   bracket (newPrintCtxt scope) freePrintCtxt $ \pctxt ->
-  withForeignPtr marshaller $ \m ->
-  bracket (pgf_print_context n_hypos c_hypos pctxt 0 m) free $ \c_text ->
+  bracket (pgf_print_context n_hypos c_hypos pctxt 0 marshaller) free $ \c_text ->
     peekText c_text
 
 -- | parses a 'String' as a type
 readType :: String -> Maybe Type
 readType str =
   unsafePerformIO $
-  withText str $ \c_str ->
-  withForeignPtr unmarshaller $ \u -> do
-    c_ty <- pgf_read_type c_str u
+  withText str $ \c_str -> do
+    c_ty <- pgf_read_type c_str unmarshaller
     if c_ty == castPtrToStablePtr nullPtr
       then return Nothing
       else do ty <- deRefStablePtr c_ty
               freeStablePtr c_ty
               return (Just ty)
+
+readContext :: String -> Maybe [Hypo]
+readContext str =
+  unsafePerformIO $
+  withText str $ \c_str ->
+  alloca $ \p_n_hypos -> do
+    c_hypos <- pgf_read_context c_str unmarshaller p_n_hypos
+    n_hypos <- peek p_n_hypos
+    if c_hypos == nullPtr && n_hypos /= 0
+      then return Nothing
+      else do hypos <- peekHypos Nothing n_hypos c_hypos
+              free c_hypos
+              return (Just hypos)
+  where
+    peekHypos mb_last 0       p_hypo = do
+      case mb_last of
+        Just last -> freeStablePtr last
+        _         -> return ()
+      return []
+    peekHypos mb_last n_hypos p_hypo = do
+      bt  <- fmap unmarshalBindType ((#peek PgfTypeHypo, bind_type) p_hypo)
+      c_cid <- (#peek PgfTypeHypo, cid) p_hypo
+      cid <- peekText c_cid
+      free c_cid
+      c_ty <- (#peek PgfTypeHypo, type) p_hypo
+      ty <- deRefStablePtr c_ty
+      case mb_last of
+        Just last | last /= c_ty -> freeStablePtr last
+        _                        -> return ()
+      hs  <- peekHypos (Just c_ty) (n_hypos-1) (p_hypo `plusPtr` (#size PgfTypeHypo))
+      return ((bt,cid,ty):hs)
 
 readProbabilitiesFromFile :: FilePath -> IO (Map.Map String Double)
 readProbabilitiesFromFile fpath = do

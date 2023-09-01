@@ -10,22 +10,10 @@
 PyObject *
 PGF_checkoutBranch(PGFObject *self, PyObject *args)
 {
-    const char *s = NULL;
-    Py_ssize_t size;
-    if (!PyArg_ParseTuple(args, "s#", &s, &size))
-        return NULL;
-
-    PgfText *name = CString_AsPgfText(s, size);
-
     PgfExn err;
-    PgfRevision rev = pgf_checkout_revision(self->db, name, &err);
-    FreePgfText(name);
+    PgfRevision rev = pgf_checkout_revision(self->db, &err);
+
     if (handleError(err) != PGF_EXN_NONE) {
-        return NULL;
-    }
-    if (rev == 0) {
-        // is this possible?
-        PyErr_SetString(PyExc_KeyError, "unknown branch name");
         return NULL;
     }
 
@@ -38,21 +26,13 @@ PGF_checkoutBranch(PGFObject *self, PyObject *args)
 TransactionObject *
 PGF_newTransaction(PGFObject *self, PyObject *args)
 {
-    PgfText *name = NULL;
     const char *s = NULL;
     Py_ssize_t size;
     if (!PyArg_ParseTuple(args, "|s#", &s, &size))
         return NULL;
 
-    if (s != NULL) {
-        name = CString_AsPgfText(s, size);
-    }
-
     PgfExn err;
-    PgfRevision rev = pgf_clone_revision(self->db, self->revision, name, &err);
-    if (name != NULL) {
-        FreePgfText(name);
-    }
+    PgfRevision rev = pgf_start_transaction(self->db, &err);
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
@@ -123,7 +103,7 @@ static PyObject *
 Transaction_commit(TransactionObject *self, PyObject *args)
 {
     PgfExn err;
-    pgf_commit_revision(self->pgf->db, self->revision, &err);
+    pgf_commit_transaction(self->pgf->db, self->revision, &err);
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
@@ -146,16 +126,23 @@ Transaction_createFunction(TransactionObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "s#O!nf", &s, &size, &pgf_TypeType, &type, &arity, &prob))
         return NULL;
 
-    PgfText *funname = CString_AsPgfText(s, size);
+    PgfText *name_pattern = CString_AsPgfText(s, size);
 
     PgfExn err;
-    pgf_create_function(self->pgf->db, self->revision, funname, (PgfType) type, arity, prob, &marshaller, &err);
-    FreePgfText(funname);
+    PgfText *name =
+        pgf_create_function(self->pgf->db, self->revision, name_pattern, (PgfType) type, arity, NULL, prob, &marshaller, &err);
+
+    FreePgfText(name_pattern);
+
     if (handleError(err) != PGF_EXN_NONE) {
         return NULL;
     }
 
-    Py_RETURN_NONE;
+    PyObject *py_name = PyUnicode_FromPgfText(name);
+
+    FreePgfText(name);
+
+    return py_name;
 }
 
 static PyObject *
@@ -352,7 +339,11 @@ static PyMethodDef Transaction_methods[] = {
     {"__exit__", (PyCFunction)(void(*)(void))Transaction_exit, METH_FASTCALL, ""},
 
     {"createFunction", (PyCFunction)Transaction_createFunction, METH_VARARGS,
-     "Create function"
+     "'createFunction(name,ty,arity,bytecode,prob)' creates a new abstract"
+     "syntax function with the given name, type, arity, etc. If the name"
+     "contains %d, %x or %a then the pattern is replaced with a random"
+     "number in base 10, 16, or 36, which guarantees that the name is"
+     "unique. The returned name is the final name after the substitution."
     },
     {"dropFunction", (PyCFunction)Transaction_dropFunction, METH_VARARGS,
      "Drop function"

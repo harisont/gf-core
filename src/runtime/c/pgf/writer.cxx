@@ -2,9 +2,10 @@
 #include "data.h"
 #include "writer.h"
 
-PgfWriter::PgfWriter(FILE *out)
+PgfWriter::PgfWriter(PgfText **langs, FILE *out)
 {
     this->out = out;
+    this->langs = langs;
     this->abstract = 0;
 }
 
@@ -55,7 +56,7 @@ void PgfWriter::write_double(double d)
 	unsigned rawexp;
 	uint64_t mantissa;
 
-	switch (fpclassify(d)) {
+	switch (::fpclassify(d)) {
 	case FP_NAN:
 		rawexp   = 0x7ff;
 		mantissa = 1;
@@ -106,36 +107,20 @@ void PgfWriter::write_uint(uint64_t u)
 	}
 }
 
-void PgfWriter::write_name(PgfText *text)
+void PgfWriter::write_text(PgfText *text)
 {
 	write_len(text->size);
     size_t n_items = fwrite(&text->text, text->size, 1, out);
     if (ferror(out))
         throw pgf_error("an error occured while writing out the grammar");
-    if (n_items != 1)
-        throw pgf_error("couldn't write to the output file");
-}
-
-void PgfWriter::write_text(PgfText *text)
-{
-    size_t len = 0;
-	const uint8_t* p = (const uint8_t*) &text->text;
-	const uint8_t* e = p + text->size;
-	while (p < e && pgf_utf8_decode(&p) != 0)
-		len++;
-
-	write_len(len);
-    size_t n_items = fwrite(&text->text, text->size, 1, out);
-    if (ferror(out))
-        throw pgf_error("an error occured while writing out the grammar");
-    if (n_items != 1)
+    if (text->size != 0 && n_items != 1)
         throw pgf_error("couldn't write to the output file");
 }
 
 template<class V>
 void PgfWriter::write_namespace(Namespace<V> nmsp, void (PgfWriter::*write_value)(ref<V>))
 {
-    write_len(nmsp->sz);
+    write_len(namespace_size(nmsp));
     write_namespace_helper(nmsp, write_value);
 }
 
@@ -151,7 +136,7 @@ void PgfWriter::write_namespace_helper(Namespace<V> nmsp, void (PgfWriter::*writ
 }
 
 template<class V>
-void PgfWriter::write_vector(ref<PgfVector<V>> vec, void (PgfWriter::*write_value)(ref<V> val))
+void PgfWriter::write_vector(ref<Vector<V>> vec, void (PgfWriter::*write_value)(ref<V> val))
 {
     write_len(vec->len);
     for (size_t i = 0; i < vec->len; i++) {
@@ -253,61 +238,6 @@ void PgfWriter::write_type(ref<PgfDTyp> ty)
     write_vector<PgfExpr>(ty->exprs, &PgfWriter::write_expr);
 }
 
-void PgfWriter::write_patt(PgfPatt patt)
-{
-    auto tag = ref<PgfPatt>::get_tag(patt);
-    write_tag(tag);
-
-	switch (tag) {
-	case PgfPattApp::tag: {
-		auto papp = ref<PgfPattApp>::untagged(patt);
-        write_name(papp->ctor);
-        write_vector(ref<PgfVector<PgfPatt>>::from_ptr(&papp->args), &PgfWriter::write_patt);
-		break;
-	}
-	case PgfPattVar::tag: {
-		auto pvar = ref<PgfPattVar>::untagged(patt);
-        write_name(&pvar->name);
-		break;
-	}
-	case PgfPattAs::tag: {
-        auto pas = ref<PgfPattAs>::untagged(patt);
-        write_name(&pas->name);
-        write_patt(pas->patt);
-		break;
-	}
-	case PgfPattWild::tag: {
-		auto pwild = ref<PgfPattWild>::untagged(patt);
-		break;
-	}
-	case PgfPattLit::tag: {
-        auto plit = ref<PgfPattLit>::untagged(patt);
-        write_literal(plit->lit);
-		break;
-	}
-	case PgfPattImplArg::tag: {
-        auto pimpl = ref<PgfPattImplArg>::untagged(patt);
-		write_patt(pimpl->patt);
-		break;
-	}
-	case PgfPattTilde::tag: {
-        auto ptilde = ref<PgfPattTilde>::untagged(patt);
-		write_expr(ptilde->expr);
-		break;
-	}
-	default:
-		throw pgf_error("Unknown pattern tag");
-	}
-}
-
-void PgfWriter::write_defn(ref<ref<PgfEquation>> r)
-{
-    ref<PgfEquation> equ = *r;
-
-    write_vector(ref<PgfVector<PgfPatt>>::from_ptr(&equ->patts), &PgfWriter::write_patt);
-    write_expr(equ->body);
-}
-
 void PgfWriter::write_flag(ref<PgfFlag> flag)
 {
     write_name(&flag->name);
@@ -319,58 +249,20 @@ void PgfWriter::write_absfun(ref<PgfAbsFun> absfun)
     write_name(&absfun->name);
     write_type(absfun->type);
     write_int(absfun->arity);
-    if (absfun->defns == 0)
+    if (absfun->bytecode == 0)
         write_tag(0);
     else {
         write_tag(1);
-        write_vector<ref<PgfEquation>>(absfun->defns, &PgfWriter::write_defn);
+        write_len(0);
     }
-    write_double(exp(-absfun->ep.prob));
-}
-
-static
-void count_funs_by_cat(Namespace<PgfAbsFun> funs, PgfText *cat, size_t *pcount)
-{
-    if (funs == 0)
-        return;
-
-    count_funs_by_cat(funs->left, cat, pcount);
-
-    if (textcmp(&funs->value->name, cat) == 0) {
-        *pcount++;
-    }
-
-    count_funs_by_cat(funs->right, cat, pcount);
-}
-
-static
-void write_funs_by_cat(Namespace<PgfAbsFun> funs, PgfText *cat, PgfWriter *wtr)
-{
-    if (funs == 0)
-        return;
-
-    write_funs_by_cat(funs->left, cat, wtr);
-
-    if (textcmp(&funs->value->name, cat) == 0) {
-        wtr->write_double(exp(-funs->value->ep.prob));
-        wtr->write_name(&funs->value->name);
-    }
-
-    write_funs_by_cat(funs->right, cat, wtr);
+    write_double(expf(-absfun->prob));
 }
 
 void PgfWriter::write_abscat(ref<PgfAbsCat> abscat)
 {
     write_name(&abscat->name);
-    write_vector(abscat->context, &PgfWriter::write_hypo);
-
-	size_t n_count = 0;
-    count_funs_by_cat(abstract->funs, &abscat->name, &n_count);
-
-	write_len(n_count);
-    write_funs_by_cat(abstract->funs, &abscat->name, this);
-	
-	write_double(exp(-abscat->prob));
+    write_vector(abscat->context, &PgfWriter::write_hypo);	
+	write_double(expf(-abscat->prob));
 }
 
 void PgfWriter::write_abstract(ref<PgfAbstr> abstract)
@@ -385,12 +277,187 @@ void PgfWriter::write_abstract(ref<PgfAbstr> abstract)
     this->abstract = 0;
 }
 
+void PgfWriter::write_variable_range(ref<PgfVariableRange> var)
+{
+    write_int(var->var);
+    write_int(var->range);
+}
+
+void PgfWriter::write_lparam(ref<PgfLParam> lparam)
+{
+    write_int(lparam->i0);
+    write_len(lparam->n_terms);
+    for (size_t i = 0; i < lparam->n_terms; i++) {
+        write_int(lparam->terms[i].factor);
+        write_int(lparam->terms[i].var);
+    }
+}
+
+void PgfWriter::write_parg(ref<PgfPArg> parg)
+{
+    write_lparam(parg->param);
+}
+
+void PgfWriter::write_presult(ref<PgfPResult> pres)
+{
+    if (pres->vars != 0)
+        write_vector(pres->vars, &PgfWriter::write_variable_range);
+    else
+        write_len(0);
+    write_lparam(ref<PgfLParam>::from_ptr(&pres->param));
+}
+
+void PgfWriter::write_symbol(PgfSymbol sym)
+{
+    auto tag = ref<PgfSymbol>::get_tag(sym);
+    write_tag(tag);
+
+    switch (tag) {
+	case PgfSymbolCat::tag: {
+        auto sym_cat = ref<PgfSymbolCat>::untagged(sym);
+        write_int(sym_cat->d);
+        write_lparam(ref<PgfLParam>::from_ptr(&sym_cat->r));
+		break;
+	}
+	case PgfSymbolLit::tag: {
+        auto sym_lit = ref<PgfSymbolLit>::untagged(sym);
+        write_int(sym_lit->d);
+        write_lparam(ref<PgfLParam>::from_ptr(&sym_lit->r));
+		break;
+	}
+	case PgfSymbolVar::tag: {
+        auto sym_var = ref<PgfSymbolVar>::untagged(sym);
+        write_int(sym_var->d);
+        write_int(sym_var->r);
+		break;
+	}
+	case PgfSymbolKS::tag: {
+        auto sym_ks = ref<PgfSymbolKS>::untagged(sym);
+        write_text(&sym_ks->token);
+		break;
+	}
+	case PgfSymbolKP::tag: {
+        auto sym_kp = ref<PgfSymbolKP>::untagged(sym);
+        write_len(sym_kp->alts.len);
+        for (size_t i = 0; i < sym_kp->alts.len; i++) {
+			PgfAlternative *alt = vector_elem(&sym_kp->alts, i);
+            write_vector(ref<Vector<PgfSymbol>>::from_ptr(&alt->form->syms), &PgfWriter::write_symbol);
+            write_vector(alt->prefixes, &PgfWriter::write_text);
+        }
+        write_vector(ref<Vector<PgfSymbol>>::from_ptr(&sym_kp->default_form->syms), &PgfWriter::write_symbol);
+		break;
+	}
+	case PgfSymbolBIND::tag:
+	case PgfSymbolSOFTBIND::tag:
+	case PgfSymbolNE::tag:
+	case PgfSymbolSOFTSPACE::tag:
+	case PgfSymbolCAPIT::tag:
+	case PgfSymbolALLCAPIT::tag:
+		break;
+	default:
+		throw pgf_error("Unknown symbol tag");
+	}
+}
+
+void PgfWriter::write_seq(ref<PgfSequence> seq)
+{
+	seq_ids.add(seq);
+    write_vector(ref<Vector<PgfSymbol>>::from_ptr(&seq->syms), &PgfWriter::write_symbol);
+}
+
+void PgfWriter::write_phrasetable(PgfPhrasetable table)
+{
+    write_len(phrasetable_size(table));
+    write_phrasetable_helper(table);
+}
+
+void PgfWriter::write_phrasetable_helper(PgfPhrasetable table)
+{
+    if (table == 0)
+        return;
+
+    write_phrasetable_helper(table->left);
+    write_seq(table->value.seq);
+    write_phrasetable_helper(table->right);
+}
+
+void PgfWriter::write_lincat(ref<PgfConcrLincat> lincat)
+{
+    write_name(&lincat->name);
+    write_vector(lincat->fields, &PgfWriter::write_lincat_field);
+    write_len(lincat->n_lindefs);
+    write_vector(lincat->args, &PgfWriter::write_parg);
+    write_vector(lincat->res, &PgfWriter::write_presult);
+    write_vector(lincat->seqs, &PgfWriter::write_seq_id);
+}
+
+void PgfWriter::write_lincat_field(ref<ref<PgfText>> field)
+{
+    write_text(*field);
+}
+
+void PgfWriter::write_lin(ref<PgfConcrLin> lin)
+{
+    write_name(&lin->name);
+    write_vector(lin->args, &PgfWriter::write_parg);
+    write_vector(lin->res, &PgfWriter::write_presult);
+    write_vector(lin->seqs, &PgfWriter::write_seq_id);
+}
+
+void PgfWriter::write_printname(ref<PgfConcrPrintname> printname)
+{
+    write_name(&printname->name);
+    write_text(printname->printname);
+}
+
+void PgfWriter::write_concrete(ref<PgfConcr> concr)
+{
+    if (langs != NULL) {
+        bool found = false;
+        PgfText** p = langs;
+        while (*p) {
+            if (textcmp(*p, &concr->name) == 0) {
+                found = true;
+                break;
+            }
+            p++;
+        }
+
+        if (!found) {
+            return;
+        }
+    }
+
+	seq_ids.start(concr);
+
+    write_name(&concr->name);
+    write_namespace<PgfFlag>(concr->cflags, &PgfWriter::write_flag);
+	write_phrasetable(concr->phrasetable);
+    write_namespace<PgfConcrLincat>(concr->lincats, &PgfWriter::write_lincat);
+	write_namespace<PgfConcrLin>(concr->lins, &PgfWriter::write_lin);
+	write_namespace<PgfConcrPrintname>(concr->printnames, &PgfWriter::write_printname);
+
+	seq_ids.end();
+}
+
 void PgfWriter::write_pgf(ref<PgfPGF> pgf)
 {
     write_u16be(pgf->major_version);
-	write_u16be(pgf->minor_version);
+    write_u16be(pgf->minor_version);
 
     write_namespace<PgfFlag>(pgf->gflags, &PgfWriter::write_flag);
 
     write_abstract(ref<PgfAbstr>::from_ptr(&pgf->abstract));
+
+    if (langs == NULL)
+        write_len(namespace_size(pgf->concretes));
+    else {
+        size_t len = 0;
+        PgfText** p = langs;
+        while (*p) {
+            len++; p++;
+        }
+        write_len(len);
+    }
+    write_namespace_helper<PgfConcr>(pgf->concretes, &PgfWriter::write_concrete);
 }

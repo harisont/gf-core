@@ -6,41 +6,30 @@ VERSION=$(shell sed -ne "s/^version: *\([0-9.]*\).*/\1/p" gf.cabal)
 # Check if stack is installed
 STACK=$(shell if hash stack 2>/dev/null; then echo "1"; else echo "0"; fi)
 
-# Check if cabal >= 2.4 is installed (with v1- and v2- commands)
-CABAL_NEW=$(shell if cabal v1-repl --help >/dev/null 2>&1 ; then echo "1"; else echo "0"; fi)
-
 ifeq ($(STACK),1)
   CMD=stack
 else
   CMD=cabal
-  ifeq ($(CABAL_NEW),1)
-    CMD_PFX=v1-
-  endif
+  CMD_OPT="--force-reinstalls"
 endif
 
-all: build
+all: src/runtime/c/libpgf.la
+	${CMD} install gf
 
-dist/setup-config: gf.cabal Setup.hs WebSetup.hs
-ifneq ($(STACK),1)
-	cabal ${CMD_PFX}configure
-endif
+src/runtime/c/libpgf.la: src/runtime/c/Makefile
+	(cd src/runtime/c; make; sudo make install)
 
-build: dist/setup-config
-	${CMD} ${CMD_PFX}build
+src/runtime/c/Makefile: src/runtime/c/Makefile.in src/runtime/c/configure
+	(cd src/runtime/c; ./configure)
 
-install:
-ifeq ($(STACK),1)
-	stack install
-else
-	cabal ${CMD_PFX}copy
-	cabal ${CMD_PFX}register
-endif
+src/runtime/c/Makefile.in src/runtime/c/configure: src/runtime/c/configure.ac src/runtime/c/Makefile.am
+	(cd src/runtime/c; autoreconf -i)
 
 doc:
-	${CMD} ${CMD_PFX}haddock
+	${CMD} haddock
 
 clean:
-	${CMD} ${CMD_PFX}clean
+	${CMD} clean
 	bash bin/clean_html
 
 html::

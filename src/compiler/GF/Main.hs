@@ -13,13 +13,14 @@ import Data.Version
 import System.Directory
 import System.Environment (getArgs)
 import System.Exit
--- import GF.System.Console (setConsoleEncoding)
+import GHC.IO.Encoding
 
 -- | Run the GF main program, taking arguments from the command line.
 -- (It calls 'setConsoleEncoding' and 'getOptions', then 'mainOpts'.)
 -- Run @gf --help@ for usage info.
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   -- setConsoleEncoding
   uncurry mainOpts =<< getOptions
 
@@ -43,7 +44,10 @@ getOptions = do
 mainOpts :: Options -> [FilePath] -> IO ()
 mainOpts opts files =
     case flag optMode opts of
-      ModeVersion     -> putStrLn $ "Grammatical Framework (GF) version " ++ showVersion version ++ "\n" ++ buildInfo
+      ModeVersion     -> do datadir <- getDataDir
+                            putStrLn $ "Grammatical Framework (GF) version " ++ showVersion version ++ "\n" ++ 
+                                       buildInfo ++ "\n" ++
+                                       "Shared folder: " ++ datadir
       ModeHelp        -> putStrLn helpMessage
       ModeServer port -> mainServerGFI opts port files
       ModeCompiler    -> mainGFC opts files

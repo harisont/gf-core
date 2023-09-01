@@ -71,7 +71,13 @@ again: {
 
 PgfText *PgfPrinter::get_text()
 {
-    return res;
+    PgfText *tmp = res;
+    if (tmp == NULL) {
+        tmp = (PgfText*) malloc(sizeof(PgfText));
+        tmp->size = 0;
+    }
+    res = NULL;
+    return tmp;
 }
 
 void PgfPrinter::flush_lambdas()
@@ -156,8 +162,9 @@ PgfExpr PgfPrinter::eabs(PgfBindType btype, PgfText *name, PgfExpr body)
     this->btype = btype;
     puts(&ctxt->name);
 
-    prio = 1;
+    int save_prio = prio; prio = 1;
     m->match_expr(this, body);
+    prio = save_prio;
 
     pop_variable();
 
@@ -173,13 +180,14 @@ PgfExpr PgfPrinter::eapp(PgfExpr fun, PgfExpr arg)
     bool p = (prio > 3);
     if (p) puts("(");
 
-    prio = 3;
+    int save_prio = prio; prio = 3;
     m->match_expr(this, fun);
 
     puts(" ");
 
     prio = 4;
     m->match_expr(this, arg);
+    prio = save_prio;
 
     if (p) puts(")");
 
@@ -294,11 +302,12 @@ PgfExpr PgfPrinter::etyped(PgfExpr expr, PgfType ty)
     flush_lambdas();
 
     puts("<");
-    prio = 0;
+    int save_prio = prio; prio = 0;
     m->match_expr(this, expr);
     puts(" : ");
     prio = 0;
     m->match_type(this, ty);
+    prio = save_prio;
     puts(">");
     return 0;
 }
@@ -308,8 +317,9 @@ PgfExpr PgfPrinter::eimplarg(PgfExpr expr)
     flush_lambdas();
 
     puts("{");
-    prio = 0;
+    int save_prio = prio; prio = 0;
     m->match_expr(this, expr);
+    prio = save_prio;
     puts("}");
     return 0;
 }
@@ -383,8 +393,9 @@ PgfLiteral PgfPrinter::lstr(PgfText *v)
 void PgfPrinter::hypo(PgfTypeHypo *hypo, int prio)
 {
     if (hypo->cid->size == 1 && strcmp(hypo->cid->text, "_") == 0) {
-        this->prio = prio;
+        int save_prio = this->prio; this->prio = prio;
         m->match_type(this, hypo->type);
+        this->prio = save_prio;
     } else {
         puts("(");
         if (hypo->bind_type == PGF_BIND_TYPE_IMPLICIT)
@@ -393,8 +404,9 @@ void PgfPrinter::hypo(PgfTypeHypo *hypo, int prio)
         if (hypo->bind_type == PGF_BIND_TYPE_IMPLICIT)
             puts("}");
         puts(" : ");
-        this->prio = 0;
+        int save_prio = this->prio; this->prio = 0;
         m->match_type(this, hypo->type);
+        this->prio = save_prio;
         puts(")");
 
         push_variable(hypo->cid);
@@ -411,18 +423,20 @@ PgfType PgfPrinter::dtyp(size_t n_hypos, PgfTypeHypo *hypos,
 
     PgfPrintContext *save_ctxt = ctxt;
 
-    for (int i = 0; i < n_hypos; i++) {
+    for (size_t i = 0; i < n_hypos; i++) {
         hypo(&hypos[i],1);
         puts(" -> ");
     }
 
     efun(cat);
 
-    for (int i = 0; i < n_exprs; i++) {
+    int save_prio = prio;
+    for (size_t i = 0; i < n_exprs; i++) {
         puts(" ");
         prio = 4;
         m->match_expr(this, exprs[i]);
     }
+    prio = save_prio;
 
     while (ctxt != save_ctxt) {
         pop_variable();
@@ -431,6 +445,147 @@ PgfType PgfPrinter::dtyp(size_t n_hypos, PgfTypeHypo *hypos,
     if (p) puts(")");
 
     return 0;
+}
+
+void PgfPrinter::parg(ref<PgfDTyp> ty, ref<PgfPArg> parg)
+{
+    efun(&ty->name);
+    puts("(");
+    lparam(parg->param);
+    puts(")");
+}
+
+void PgfPrinter::bindings(PgfPrintContext *context, size_t n_vars)
+{
+    if (context == NULL || n_vars == 0)
+        return;
+
+    bindings(context->next, n_vars-1);
+    if (n_vars > 1)
+        puts(",");
+    efun(&context->name);
+}
+
+void PgfPrinter::lvar(size_t var)
+{
+    char vars[10] = {'i','j','k','l','m','n','o','p','q','r'};
+    size_t i = var / sizeof(vars);
+    size_t j = var % sizeof(vars);
+
+    if (i == 0)
+        nprintf(32,"%c",vars[j]);
+    else
+        nprintf(32,"%c%ld",vars[j],i);
+}
+
+void PgfPrinter::lparam(ref<PgfLParam> lparam)
+{
+    if (lparam->i0 != 0 || lparam->n_terms == 0)
+        nprintf(32,"%ld",lparam->i0);
+    for (size_t k = 0; k < lparam->n_terms; k++) {
+        if (lparam->i0 != 0 || k > 0)
+            puts("+");
+        if (lparam->terms[k].factor != 1) {
+            nprintf(32,"%ld",lparam->terms[k].factor);
+            puts("*");
+        }
+
+        lvar(lparam->terms[k].var);
+    }
+}
+
+void PgfPrinter::lvar_ranges(ref<Vector<PgfVariableRange>> vars)
+{
+    puts("∀{");
+    for (size_t i = 0; i < vars->len; i++) {
+        if (i > 0)
+            puts(", ");
+        lvar(vars->data[i].var);
+        nprintf(32,"<%ld",vars->data[i].range);
+    }
+    puts("}");
+}
+
+void PgfPrinter::symbol(PgfSymbol sym)
+{
+    switch (ref<PgfSymbol>::get_tag(sym)) {
+	case PgfSymbolCat::tag: {
+        auto sym_cat = ref<PgfSymbolCat>::untagged(sym);
+        nprintf(32, "<%ld,",sym_cat->d);
+        lparam(ref<PgfLParam>::from_ptr(&sym_cat->r));
+        puts(">");
+		break;
+	}
+	case PgfSymbolLit::tag: {
+        auto sym_lit = ref<PgfSymbolLit>::untagged(sym);
+        nprintf(32, "{%ld,",sym_lit->d);
+        lparam(ref<PgfLParam>::from_ptr(&sym_lit->r));
+        puts("}");
+		break;
+	}
+	case PgfSymbolVar::tag: {
+        auto sym_var = ref<PgfSymbolVar>::untagged(sym);
+        nprintf(64, "<%ld,$%ld>",sym_var->d, sym_var->r);
+		break;
+	}
+	case PgfSymbolKS::tag: {
+        auto sym_ks = ref<PgfSymbolKS>::untagged(sym);
+        lstr(&sym_ks->token);
+		break;
+	}
+	case PgfSymbolKP::tag: {
+        auto sym_kp = ref<PgfSymbolKP>::untagged(sym);
+        puts("pre {");
+
+        sequence(sym_kp->default_form);
+
+        for (size_t i = 0; i < sym_kp->alts.len; i++) {
+            puts("; ");
+            sequence(sym_kp->alts.data[i].form);
+            puts(" /");
+            for (size_t j = 0; j < sym_kp->alts.data[i].prefixes->len; j++) {
+                puts(" ");
+                lstr(sym_kp->alts.data[i].prefixes->data[j]);
+            }
+        }
+
+        puts("}");
+		break;
+	}
+	case PgfSymbolBIND::tag:
+        puts("BIND");
+        break;
+	case PgfSymbolSOFTBIND::tag:
+        puts("SOFT_BIND");
+        break;
+	case PgfSymbolNE::tag:
+        puts("nonExist");
+        break;
+	case PgfSymbolSOFTSPACE::tag:
+        puts("SOFT_SPACE");
+        break;
+	case PgfSymbolCAPIT::tag:
+        puts("CAPIT");
+        break;
+	case PgfSymbolALLCAPIT::tag:
+        puts("ALL_CAPIT");
+        break;
+	}
+}
+
+void PgfPrinter::sequence(ref<PgfSequence> seq)
+{
+    for (size_t i = 0; i < seq->syms.len; i++) {
+        if (i > 0)
+            puts(" ");
+
+        symbol(*vector_elem(&seq->syms, i));
+    }
+}
+
+void PgfPrinter::seq_id(PgfPhrasetableIds *seq_ids, ref<PgfSequence> seq)
+{
+	nprintf(5, "S%zu", seq_ids->get(seq));
 }
 
 void PgfPrinter::free_ref(object x)

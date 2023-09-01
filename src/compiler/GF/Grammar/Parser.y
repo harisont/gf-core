@@ -132,14 +132,14 @@ ModDef
                                           (opens,jments,opts) = case content of { Just c -> c; Nothing -> ([],[],noOptions) }
                                       jments <- mapM (checkInfoType mtype) jments
                                       defs <- buildAnyTree id jments
-                                      return (id, ModInfo mtype mstat opts extends with opens [] "" defs)  }
+                                      return (id, ModInfo mtype mstat opts extends with opens [] "" Nothing defs)  }
 
 ModHeader :: { SourceModule }
 ModHeader
   : ComplMod ModType '=' ModHeaderBody { let { mstat = $1 ;
                                                (mtype,id) = $2 ;
                                                (extends,with,opens) = $4 }
-                                         in (id, ModInfo mtype mstat noOptions extends with opens [] "" Map.empty) }
+                                         in (id, ModInfo mtype mstat noOptions extends with opens [] "" Nothing Map.empty) }
 
 ComplMod :: { ModuleStatus }
 ComplMod 
@@ -727,7 +727,7 @@ listCatDef (L loc (id,cont,size)) = [catd,nilfund,consfund]
     niltyp  = mkProdSimple (cont' ++ replicate size cd) lc
     constyp = mkProdSimple (cont' ++ [cd, mkHypo lc]) lc
 
-    mkId x i = if isWildIdent x then (varX i) else x
+    mkId x i = if x == identW then (varX i) else x
 
 tryLoc (c,mty,Just e) = return (c,(mty,e))
 tryLoc (c,_  ,_     ) = fail ("local definition of" +++ showIdent c +++ "without value")
@@ -811,16 +811,6 @@ mkAlts cs = case cs of
    mkAlt (p,t) = do
      ss <- mkStrs p
      return (t,ss)
-   mkStrs p = case p of
-     PAlt a b -> do
-       Strs as <- mkStrs a
-       Strs bs <- mkStrs b
-       return $ Strs $ as ++ bs
-     PString s -> return $ Strs [K s]
-     PV x -> return (Vr x) --- for macros; not yet complete
-     PMacro x -> return (Vr x) --- for macros; not yet complete
-     PM c -> return (Q c) --- for macros; not yet complete
-     _ -> fail "no strs from pattern"
 
 mkL :: Posn -> Posn -> x -> L x
 mkL (Pn l1 _) (Pn l2 _) x = L (Local l1 l2) x

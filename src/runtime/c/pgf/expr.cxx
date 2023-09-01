@@ -116,7 +116,7 @@ PgfExpr PgfDBUnmarshaller::eabs(PgfBindType bind_type, PgfText *name, PgfExpr bo
     eabs->bind_type = bind_type;
     eabs->body = m->match_expr(this, body);
     memcpy(&eabs->name, name, sizeof(PgfText)+name->size+1);
-    return ref<PgfExprAbs>::tagged(eabs);
+    return eabs.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::eapp(PgfExpr fun, PgfExpr arg)
@@ -124,21 +124,21 @@ PgfExpr PgfDBUnmarshaller::eapp(PgfExpr fun, PgfExpr arg)
     ref<PgfExprApp> eapp = PgfDB::malloc<PgfExprApp>();
     eapp->fun = m->match_expr(this, fun);
 	eapp->arg = m->match_expr(this, arg);
-    return ref<PgfExprApp>::tagged(eapp);
+    return eapp.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::elit(PgfLiteral lit)
 {
     ref<PgfExprLit> elit = PgfDB::malloc<PgfExprLit>();
     elit->lit = m->match_lit(this, lit);
-    return ref<PgfExprLit>::tagged(elit);
+    return elit.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::emeta(PgfMetaId meta_id)
 {
     ref<PgfExprMeta> emeta = PgfDB::malloc<PgfExprMeta>();
 	emeta->id = meta_id;
-	return ref<PgfExprMeta>::tagged(emeta);
+	return emeta.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::efun(PgfText *name)
@@ -146,14 +146,14 @@ PgfExpr PgfDBUnmarshaller::efun(PgfText *name)
     ref<PgfExprFun> efun =
         PgfDB::malloc<PgfExprFun>(name->size+1);
     memcpy(&efun->name, name, sizeof(PgfText)+name->size+1);
-    return ref<PgfExprFun>::tagged(efun);
+    return efun.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::evar(int index)
 {
     ref<PgfExprVar> evar = PgfDB::malloc<PgfExprVar>();
     evar->var = index;
-    return ref<PgfExprVar>::tagged(evar);
+    return evar.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::etyped(PgfExpr expr, PgfType ty)
@@ -161,14 +161,14 @@ PgfExpr PgfDBUnmarshaller::etyped(PgfExpr expr, PgfType ty)
     ref<PgfExprTyped> etyped = PgfDB::malloc<PgfExprTyped>();
     etyped->expr = m->match_expr(this, expr);
     etyped->type = m->match_type(this, ty);
-    return ref<PgfExprTyped>::tagged(etyped);
+    return etyped.tagged();
 }
 
 PgfExpr PgfDBUnmarshaller::eimplarg(PgfExpr expr)
 {
     ref<PgfExprImplArg> eimpl = current_db->malloc<PgfExprImplArg>();
 	eimpl->expr = m->match_expr(this, expr);
-    return ref<PgfExprImplArg>::tagged(eimpl);
+    return eimpl.tagged();
 }
 
 PgfLiteral PgfDBUnmarshaller::lint(size_t size, uintmax_t *val)
@@ -177,14 +177,14 @@ PgfLiteral PgfDBUnmarshaller::lint(size_t size, uintmax_t *val)
         PgfDB::malloc<PgfLiteralInt>(size*sizeof(uintmax_t));
     lit_int->size = size;
     memcpy(&lit_int->val, val, size*sizeof(uintmax_t));
-    return ref<PgfLiteralInt>::tagged(lit_int);
+    return lit_int.tagged();
 }
 
 PgfLiteral PgfDBUnmarshaller::lflt(double val)
 {
     ref<PgfLiteralFlt> lit_flt = PgfDB::malloc<PgfLiteralFlt>();
     lit_flt->val = val;
-    return ref<PgfLiteralFlt>::tagged(lit_flt);
+    return lit_flt.tagged();
 }
 
 PgfLiteral PgfDBUnmarshaller::lstr(PgfText *val)
@@ -192,7 +192,7 @@ PgfLiteral PgfDBUnmarshaller::lstr(PgfText *val)
     ref<PgfLiteralStr> lit_str =
         PgfDB::malloc<PgfLiteralStr>(val->size+1);
     memcpy(&lit_str->val, val, sizeof(PgfText)+val->size+1);
-    return ref<PgfLiteralStr>::tagged(lit_str);
+    return lit_str.tagged();
 }
 
 PgfType PgfDBUnmarshaller::dtyp(size_t n_hypos, PgfTypeHypo *hypos,
@@ -217,9 +217,81 @@ PgfType PgfDBUnmarshaller::dtyp(size_t n_hypos, PgfTypeHypo *hypos,
     return ty.as_object();
 }
 
-void PgfDBUnmarshaller::free_ref(object x)
+void PgfDBUnmarshaller::free_ref(object expr)
 {
-    PgfDB::free(ref<void>::untagged(x));
+}
+
+PgfLiteral PgfInternalMarshaller::match_lit(PgfUnmarshaller *u, PgfLiteral l)
+{
+    switch (ref<PgfLiteral>::get_tag(l)) {
+    case PgfLiteralInt::tag: {
+        auto lint = ref<PgfLiteralInt>::untagged(l);
+        return u->lint(lint->size, lint->val);
+    }
+    case PgfLiteralFlt::tag: {
+        return u->lflt(ref<PgfLiteralFlt>::untagged(l)->val);
+    }
+    case PgfLiteralStr::tag: {
+        return u->lstr(&ref<PgfLiteralStr>::untagged(l)->val);
+    }
+	default:
+		throw pgf_error("Unknown literal tag");
+    }
+}
+
+PgfExpr PgfInternalMarshaller::match_expr(PgfUnmarshaller *u, PgfExpr e)
+{
+    switch (ref<PgfExpr>::get_tag(e)) {
+    case PgfExprAbs::tag: {
+        auto eabs = ref<PgfExprAbs>::untagged(e);
+        return u->eabs(eabs->bind_type,&eabs->name,eabs->body);
+    }
+    case PgfExprApp::tag: {
+        auto eapp = ref<PgfExprApp>::untagged(e);
+        return u->eapp(eapp->fun,eapp->arg);
+    }
+    case PgfExprLit::tag: {
+        auto elit = ref<PgfExprLit>::untagged(e);
+        return u->elit(elit->lit);
+    }
+    case PgfExprMeta::tag: {
+        return u->emeta(ref<PgfExprMeta>::untagged(e)->id);
+    }
+	case PgfExprFun::tag: {
+        return u->efun(&ref<PgfExprFun>::untagged(e)->name);
+    }
+	case PgfExprVar::tag: {
+        return u->evar(ref<PgfExprVar>::untagged(e)->var);
+	}
+	case PgfExprTyped::tag: {
+        auto etyped = ref<PgfExprTyped>::untagged(e);
+        return u->etyped(etyped->expr,etyped->type.as_object());
+	}
+	case PgfExprImplArg::tag: {
+        auto eimpl = ref<PgfExprImplArg>::untagged(e);
+        return u->eimplarg(eimpl->expr);
+	}
+	default:
+		throw pgf_error("Unknown expression tag");
+    }
+}
+
+PGF_INTERNAL
+PgfType PgfInternalMarshaller::match_type(PgfUnmarshaller *u, PgfType ty)
+{
+    ref<PgfDTyp> tp = ty;
+
+    PgfTypeHypo *hypos = (PgfTypeHypo *)
+        alloca(tp->hypos->len * sizeof(PgfTypeHypo));
+    for (size_t i = 0; i < tp->hypos->len; i++) {
+        hypos[i].bind_type = tp->hypos->data[i].bind_type;
+        hypos[i].cid = &(*tp->hypos->data[i].cid);
+        hypos[i].type = tp->hypos->data[i].type.as_object();
+    }
+
+    return  u->dtyp(tp->hypos->len, hypos,
+                    &tp->name,
+                    tp->exprs->len, tp->exprs->data);
 }
 
 PgfExprParser::PgfExprParser(PgfText *input, PgfUnmarshaller *unmarshaller)
@@ -230,6 +302,7 @@ PgfExprParser::PgfExprParser(PgfText *input, PgfUnmarshaller *unmarshaller)
     u   = unmarshaller;
     token_pos = NULL;
     token_value = NULL;
+    bs = NULL;
 
 	token();
 }
@@ -363,7 +436,7 @@ void PgfExprParser::token()
     token_pos   = pos;
 	token_value = NULL;
 
-	while (isspace(ch)) {
+	while (pgf_utf8_is_space(ch)) {
         token_pos   = pos;
         if (!getc()) {
             token_tag = PGF_TOKEN_EOF;
@@ -409,7 +482,7 @@ void PgfExprParser::token()
             if (ch == '>') {
                 getc();
                 token_tag = PGF_TOKEN_RARROW;
-            } else if (isdigit(ch)) {
+            } else if (pgf_utf8_is_digit(ch)) {
                 putc('-');
                 goto digit;
             }
@@ -436,6 +509,12 @@ void PgfExprParser::token()
             if (ch == '\'') {
                 getc();
                 token_tag = PGF_TOKEN_IDENT;
+                if (token_value == NULL) {
+                    token_value = (PgfText*)
+                        malloc(sizeof(PgfText)+1);
+                    token_value->size    = 0;
+                    token_value->text[0] = 0;
+                }
             }
         }
 		break;
@@ -449,6 +528,12 @@ void PgfExprParser::token()
             if (ch == '"') {
                 getc();
                 token_tag = PGF_TOKEN_STR;
+                if (token_value == NULL) {
+                    token_value = (PgfText*)
+                        malloc(sizeof(PgfText)+1);
+                    token_value->size    = 0;
+                    token_value->text[0] = 0;
+                }
             }
         }
         break;
@@ -464,18 +549,18 @@ void PgfExprParser::token()
                 token_tag = PGF_TOKEN_WILD;
             else
                 token_tag = PGF_TOKEN_IDENT;
-		} else if (isdigit(ch)) {
+		} else if (pgf_utf8_is_digit(ch)) {
 digit:
 			do {
 				putc(ch);
 				if (!getc())
                     break;
-			} while (isdigit(ch));
+			} while (pgf_utf8_is_digit(ch));
 
             if (ch == '.') {
                 putc(ch);
                 if (getc()) {
-                    while (isdigit(ch)) {
+                    while (pgf_utf8_is_digit(ch)) {
                         putc(ch);
                         if (!getc())
                             break;
@@ -493,7 +578,7 @@ digit:
 
 bool PgfExprParser::lookahead(int ch)
 {
-	while (isspace(this->ch)) {
+	while (pgf_utf8_is_space(this->ch)) {
         if (!getc())
             break;
 	}
@@ -557,19 +642,38 @@ PgfExpr PgfExprParser::parse_term()
 		return u->emeta(id);
 	}
 	case PGF_TOKEN_IDENT: {
+        PgfBind *last = bs;
+        size_t index = 0;
+        while (last != NULL) {
+            if (textcmp(&last->var,token_value) == 0) {
+                PgfExpr e = u->evar(index);
+                token();
+                return e;
+            }
+            last = last->next;
+            index++;
+        }
+
         PgfExpr e = u->efun(token_value);
 		token();
         return e;
 	}
 	case PGF_TOKEN_INT: {
-        size_t size = (token_value->size + LINT_BASE_LOG - 1)/LINT_BASE_LOG;
+        size_t n_digits = token_value->size;
+        char  *p_digits = token_value->text;
+        if (*p_digits == '-') {
+            n_digits--;
+            p_digits++;
+        }
+
+        size_t size = (n_digits + LINT_BASE_LOG - 1)/LINT_BASE_LOG;
         uintmax_t *value = (uintmax_t *) alloca(size*sizeof(uintmax_t));
         char *p = token_value->text + token_value->size;
         for (size_t i = size; i > 0; i--) {
             char tmp = *p; *p = 0;
 
             char *s = p - LINT_BASE_LOG;
-            if (s < token_value->text)
+            if (s <= p_digits)
                 s = token_value->text;
             value[i-1] = (uintmax_t)
                 (s == token_value->text) ? strtoll(s, NULL, 10)
@@ -631,9 +735,9 @@ PgfExpr PgfExprParser::parse_arg()
 	return arg;
 }
 
-PgfBind *PgfExprParser::parse_bind(PgfBind *next)
+bool PgfExprParser::parse_bind()
 {
-    PgfBind *last = next;
+    PgfBind *last = bs;
 	PgfBindType bind_type = PGF_BIND_TYPE_EXPLICIT;
 
 	if (token_tag == PGF_TOKEN_LCURLY) {
@@ -650,10 +754,12 @@ PgfBind *PgfExprParser::parse_bind(PgfBind *next)
 		}
 
         PgfBind *bind = (PgfBind *) malloc(sizeof(PgfBind)+var->size+1);
+        if (bind == NULL)
+            goto error;
         bind->bind_type = bind_type;
-        bind->next      = last;
+        bind->next      = bs;
         memcpy(&bind->var, var, sizeof(PgfText)+var->size+1);
-        last = bind;
+        bs = bind;
 
         token();
 
@@ -671,31 +777,20 @@ PgfBind *PgfExprParser::parse_bind(PgfBind *next)
 		token();
 	}
 
-	return last;
+	return true;
 
 error:
-    while (last != next) {
-        PgfBind *tmp = last;
-        last = last->next;
-        free(tmp);
-    }
-    return NULL;
+    pop_binds(last);
+    return false;
 }
 
-PgfBind *PgfExprParser::parse_binds(PgfBind *next)
+bool PgfExprParser::parse_binds()
 {
+    PgfBind *last = bs;
 	for (;;) {
-        PgfBind *binds = parse_bind(next);
-        if (binds == NULL) {
-            while (next != NULL) {
-                PgfBind *tmp = next;
-                next = next->next;
-                free(tmp);
-            }
-            break;
+        if (!parse_bind()) {
+            goto error;
         }
-
-        next = binds;
 
 		if (token_tag != PGF_TOKEN_COMMA)
 			break;
@@ -703,7 +798,20 @@ PgfBind *PgfExprParser::parse_binds(PgfBind *next)
 		token();
 	}
 
-	return next;
+	return true;
+
+error:
+    pop_binds(last);
+    return false;
+}
+
+void PgfExprParser::pop_binds(PgfBind *last)
+{
+    while (bs != last) {
+        PgfBind *tmp = bs;
+        bs = bs->next;
+        free(tmp);
+    }
 }
 
 PgfExpr PgfExprParser::parse_expr()
@@ -713,8 +821,8 @@ PgfExpr PgfExprParser::parse_expr()
 	if (token_tag == PGF_TOKEN_LAMBDA) {
 		token();
 
-		PgfBind* bs = parse_binds(NULL);
-		if (bs == NULL)
+        PgfBind *last = bs;
+		if (!parse_binds())
 			return 0;
 
 		if (token_tag != PGF_TOKEN_RARROW) {
@@ -726,7 +834,7 @@ PgfExpr PgfExprParser::parse_expr()
 		if (expr == 0)
 			goto error;
 
-		while (bs != NULL) {
+		while (bs != last) {
             PgfExpr abs_expr = u->eabs(bs->bind_type, &bs->var, expr);
             u->free_ref(expr);
             expr = abs_expr;
@@ -739,12 +847,7 @@ PgfExpr PgfExprParser::parse_expr()
 		return expr;
 
 error:
-		while (bs != NULL) {
-            PgfBind *tmp = bs;
-            bs = bs->next;
-            free(tmp);
-		}
-
+		pop_binds(last);
 		return 0;
 	} else {
 		expr = parse_term();
@@ -759,22 +862,28 @@ error:
 		       token_tag != PGF_TOKEN_COMMA &&
 		       token_tag != PGF_TOKEN_SEMI &&
 		       token_tag != PGF_TOKEN_UNKNOWN) {
+			PgfExpr fun = expr;
 			PgfExpr arg = parse_arg();
 			if (arg == 0)
 				return expr;
 
-            expr = u->eapp(expr, arg);
+            expr = u->eapp(fun, arg);
+
+            u->free_ref(fun);
+            u->free_ref(arg);
 		}
 
 		return expr;
 	}
 }
 
-bool PgfExprParser::parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos)
+bool PgfExprParser::parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos,
+                                PgfBind **pbs)
 {
 	PgfText *var;
 	PgfBindType bind_type = PGF_BIND_TYPE_EXPLICIT;
 
+    *pbs = bs;
 	for (;;) {
 		if (bind_type == PGF_BIND_TYPE_EXPLICIT &&
 		    token_tag == PGF_TOKEN_LCURLY) {
@@ -786,7 +895,7 @@ bool PgfExprParser::parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos)
 		if (token_tag == PGF_TOKEN_IDENT || token_tag == PGF_TOKEN_WILD) {
 			var = token_value;
 		} else {
-			return false;
+			goto error;
 		}
 
         *hypos = (PgfTypeHypo*) realloc(*hypos, sizeof(PgfTypeHypo)*(*n_hypos+1));
@@ -795,6 +904,14 @@ bool PgfExprParser::parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos)
         bt->cid  = textdup(var);
         bt->type = 0;
         (*n_hypos)++;
+
+        PgfBind *bind = (PgfBind *) malloc(sizeof(PgfBind)+var->size+1);
+        if (bind == NULL)
+            goto error;
+        bind->bind_type = bind_type;
+        bind->next      = *pbs;
+        memcpy(&bind->var, var, sizeof(PgfText)+var->size+1);
+        *pbs = bind;
 
         token();
 
@@ -812,9 +929,17 @@ bool PgfExprParser::parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos)
 	}
 
 	if (bind_type == PGF_BIND_TYPE_IMPLICIT)
-		return false;
+		goto error;
 
 	return true;
+
+error:
+    while (*pbs != bs) {
+        PgfBind *tmp = *pbs;
+        *pbs = (*pbs)->next;
+        free(tmp);
+    }
+    return false;
 }
 
 static
@@ -835,6 +960,7 @@ PgfType PgfExprParser::parse_type()
 
     size_t n_hypos = 0;
     PgfTypeHypo *hypos = NULL;
+    PgfBind *last = bs;
 
     PgfText *cat = NULL;
 
@@ -846,6 +972,7 @@ PgfType PgfExprParser::parse_type()
 			token();
 
             size_t n_start = n_hypos;
+            PgfBind *new_bs = bs;
 
 			if ((token_tag == PGF_TOKEN_IDENT &&
 			     (lookahead(',') ||
@@ -853,11 +980,13 @@ PgfType PgfExprParser::parse_type()
 				(token_tag == PGF_TOKEN_LCURLY) ||
 				(token_tag == PGF_TOKEN_WILD)) {
 
-				if (!parse_hypos(&n_hypos, &hypos))
+				if (!parse_hypos(&n_hypos, &hypos, &new_bs))
 					goto exit;
 
-				if (token_tag != PGF_TOKEN_COLON)
+				if (token_tag != PGF_TOKEN_COLON) {
+                    bs = new_bs; // to be recycled
 					goto exit;
+                }
 
 				token();
 			} else {
@@ -872,8 +1001,10 @@ PgfType PgfExprParser::parse_type()
             size_t n_end = n_hypos;
 
 			PgfType type = parse_type();
-			if (type == 0)
+            bs = new_bs;
+			if (type == 0) {
 				goto exit;
+            }
 
 			if (token_tag != PGF_TOKEN_RPAR)
 				goto exit;
@@ -942,6 +1073,8 @@ exit:
     }
     free(hypos);
 
+    pop_binds(last);
+
     free(cat);
 
     while (n_args > 0) {
@@ -952,26 +1085,105 @@ exit:
     return type;
 }
 
+PgfTypeHypo *PgfExprParser::parse_context(size_t *p_n_hypos)
+{
+    size_t n_hypos = 0;
+    PgfTypeHypo *hypos = NULL;
+    PgfBind *last = bs;
+
+	for (;;) {
+		if (token_tag == PGF_TOKEN_LPAR) {
+			token();
+
+            size_t n_start = n_hypos;
+            PgfBind *new_bs = bs;
+
+			if ((token_tag == PGF_TOKEN_IDENT &&
+			     (lookahead(',') ||
+				  lookahead(':'))) ||
+				(token_tag == PGF_TOKEN_LCURLY) ||
+				(token_tag == PGF_TOKEN_WILD)) {
+
+				if (!parse_hypos(&n_hypos, &hypos, &new_bs))
+					goto exit;
+
+				if (token_tag != PGF_TOKEN_COLON) {
+                    bs = new_bs; // to be recycled
+					goto exit;
+                }
+
+				token();
+			} else {
+                hypos = (PgfTypeHypo*) realloc(hypos, sizeof(PgfTypeHypo)*(n_hypos+1));
+                PgfTypeHypo *bt = &hypos[n_hypos];
+                bt->bind_type = PGF_BIND_TYPE_EXPLICIT;
+                bt->cid  = mk_wildcard();
+                bt->type = 0;
+                n_hypos++;
+			}
+
+            size_t n_end = n_hypos;
+
+			PgfType type = parse_type();
+            bs = new_bs;
+			if (type == 0)
+				goto exit;
+
+			if (token_tag != PGF_TOKEN_RPAR)
+				goto exit;
+
+			token();
+
+			for (size_t i = n_start; i < n_end; i++) {
+				hypos[i].type = type;
+			}
+		} else if (token_tag == PGF_TOKEN_IDENT) {
+            hypos = (PgfTypeHypo*) realloc(hypos, sizeof(PgfTypeHypo)*(n_hypos+1));
+            PgfTypeHypo *bt = &hypos[n_hypos];
+            bt->bind_type = PGF_BIND_TYPE_EXPLICIT;
+            bt->cid  = mk_wildcard();
+            bt->type = u->dtyp(0,NULL,token_value,0,NULL);
+            n_hypos++;
+
+            token();
+		} else {
+            goto exit;
+        }
+	}
+
+exit:
+    pop_binds(last);
+    *p_n_hypos = n_hypos;
+    return hypos;
+}
+
 PgfExpr PgfExprProbEstimator::eabs(PgfBindType bind_type, PgfText *name, PgfExpr body)
 {
     m->match_expr(this, body);
+    cat_prob = 0;
     return 0;
 }
 
 PgfExpr PgfExprProbEstimator::eapp(PgfExpr fun, PgfExpr arg)
 {
-    m->match_expr(this, fun);
+    prob_t tmp = cat_prob_total;
+    cat_prob_total = 0;
     m->match_expr(this, arg);
+    cat_prob_total = tmp + cat_prob;
+    m->match_expr(this, fun);
     return 0;
 }
 
 PgfExpr PgfExprProbEstimator::elit(PgfLiteral lit)
 {
+    cat_prob = 0;
     return 0;
 }
 
 PgfExpr PgfExprProbEstimator::emeta(PgfMetaId meta_id)
 {
+    prob += cat_prob_total;
+    cat_prob = 0;
     return 0;
 }
 
@@ -979,16 +1191,25 @@ PgfExpr PgfExprProbEstimator::efun(PgfText *name)
 {
     ref<PgfAbsFun> absfun =
         namespace_lookup(pgf->abstract.funs, name);
-    if (absfun == 0)
+    if (absfun == 0) {
         prob = INFINITY;
-    else
-        prob += absfun->ep.prob;
+        cat_prob = INFINITY;
+    } else {
+        prob += absfun->prob;
 
+        ref<PgfAbsCat> abscat =
+            namespace_lookup(pgf->abstract.cats, &absfun->type->name);
+        if (abscat == 0)
+            cat_prob = INFINITY;
+        else
+            cat_prob = abscat->prob;
+    }
     return 0;
 }
 
 PgfExpr PgfExprProbEstimator::evar(int index)
 {
+    cat_prob = 0;
     return 0;
 }
 
@@ -1031,11 +1252,12 @@ void PgfExprProbEstimator::free_ref(object x)
 }
 
 PGF_INTERNAL
-void pgf_literal_free(PgfLiteral literal)
+void pgf_literal_release(PgfLiteral literal)
 {
     switch (ref<PgfLiteral>::get_tag(literal)) {
     case PgfLiteralInt::tag: {
-        PgfDB::free(ref<PgfLiteralInt>::untagged(literal));
+        auto lint = ref<PgfLiteralInt>::untagged(literal);
+        PgfDB::free(lint, lint->size*sizeof(uintmax_t));
         break;
     }
     case PgfLiteralFlt::tag: {
@@ -1043,7 +1265,8 @@ void pgf_literal_free(PgfLiteral literal)
         break;
     }
     case PgfLiteralStr::tag: {
-        PgfDB::free(ref<PgfLiteralStr>::untagged(literal));
+        auto lstr = ref<PgfLiteralStr>::untagged(literal);
+        PgfDB::free(lstr, lstr->val.size+1);
         break;
     }
 	default:
@@ -1052,25 +1275,25 @@ void pgf_literal_free(PgfLiteral literal)
 }
 
 PGF_INTERNAL
-void pgf_expr_free(PgfExpr expr)
+void pgf_expr_release(PgfExpr expr)
 {
     switch (ref<PgfExpr>::get_tag(expr)) {
     case PgfExprAbs::tag: {
         auto eabs = ref<PgfExprAbs>::untagged(expr);
-        pgf_expr_free(eabs->body);
-        PgfDB::free(eabs);
+        pgf_expr_release(eabs->body);
+        PgfDB::free(eabs, eabs->name.size+1);
         break;
     }
     case PgfExprApp::tag: {
         auto eapp = ref<PgfExprApp>::untagged(expr);
-        pgf_expr_free(eapp->fun);
-        pgf_expr_free(eapp->arg);
+        pgf_expr_release(eapp->fun);
+        pgf_expr_release(eapp->arg);
         PgfDB::free(eapp);
         break;
     }
     case PgfExprLit::tag: {
         auto elit = ref<PgfExprLit>::untagged(expr);
-        pgf_literal_free(elit->lit);
+        pgf_literal_release(elit->lit);
         PgfDB::free(elit);
         break;
     }
@@ -1079,7 +1302,8 @@ void pgf_expr_free(PgfExpr expr)
         break;
     }
 	case PgfExprFun::tag: {
-        PgfDB::free(ref<PgfExprFun>::untagged(expr));
+        auto efun = ref<PgfExprFun>::untagged(expr);
+        PgfDB::free(efun, efun->name.size+1);
         break;
     }
 	case PgfExprVar::tag: {
@@ -1088,14 +1312,14 @@ void pgf_expr_free(PgfExpr expr)
 	}
 	case PgfExprTyped::tag: {
         auto etyped = ref<PgfExprTyped>::untagged(expr);
-        pgf_expr_free(etyped->expr);
-        pgf_type_free(etyped->type);
+        pgf_expr_release(etyped->expr);
+        pgf_type_release(etyped->type);
         PgfDB::free(etyped);
         break;
 	}
 	case PgfExprImplArg::tag: {
         auto eimpl = ref<PgfExprImplArg>::untagged(expr);
-        pgf_expr_free(eimpl->expr);
+        pgf_expr_release(eimpl->expr);
         PgfDB::free(eimpl);
         break;
 	}
@@ -1105,76 +1329,25 @@ void pgf_expr_free(PgfExpr expr)
 }
 
 PGF_INTERNAL
-void pgf_context_free(ref<PgfVector<PgfHypo>> hypos)
+void pgf_context_release(ref<Vector<PgfHypo>> hypos)
 {
     for (size_t i = 0; i < hypos->len; i++) {
-        PgfDB::free(vector_elem(hypos, i)->cid);
-        pgf_type_free(vector_elem(hypos, i)->type);
+        text_db_release(vector_elem(hypos, i)->cid);
+        pgf_type_release(vector_elem(hypos, i)->type);
     }
 
-    PgfDB::free(hypos);
+    Vector<PgfHypo>::release(hypos);
 }
 
 PGF_INTERNAL
-void pgf_type_free(ref<PgfDTyp> dtyp)
+void pgf_type_release(ref<PgfDTyp> dtyp)
 {
-    pgf_context_free(dtyp->hypos);
+    pgf_context_release(dtyp->hypos);
 
     for (size_t i = 0; i < dtyp->exprs->len; i++) {
-        pgf_expr_free(*vector_elem(dtyp->exprs, i));
+        pgf_expr_release(*vector_elem(dtyp->exprs, i));
     }
-    PgfDB::free(dtyp->exprs);
+    Vector<PgfExpr>::release(dtyp->exprs);
 
-    PgfDB::free(dtyp);
-}
-
-PGF_INTERNAL
-void pgf_patt_free(PgfPatt patt)
-{
-    switch (ref<PgfPatt>::get_tag(patt)) {
-    case PgfPattApp::tag: {
-        auto papp = ref<PgfPattApp>::untagged(patt);
-        PgfDB::free(papp->ctor);
-        for (size_t i = 0; i < papp->args.len; i++) {
-            PgfPatt patt = *vector_elem(ref<PgfVector<PgfPatt>>::from_ptr(&papp->args), i);
-            pgf_patt_free(patt);
-        }
-        PgfDB::free(papp);
-        break;
-    }
-	case PgfPattVar::tag: {
-        PgfDB::free(ref<PgfPattVar>::untagged(patt));
-        break;
-	}
-	case PgfPattAs::tag: {
-        auto pas = ref<PgfPattAs>::untagged(patt);
-        pgf_patt_free(pas->patt);
-        PgfDB::free(pas);
-        break;
-	}
-	case PgfPattWild::tag: {
-        PgfDB::free(ref<PgfPattWild>::untagged(patt));
-        break;
-	}
-    case PgfPattLit::tag: {
-        auto plit = ref<PgfPattLit>::untagged(patt);
-        pgf_literal_free(plit->lit);
-        PgfDB::free(plit);
-        break;
-    }
-	case PgfPattImplArg::tag: {
-        auto pimpl = ref<PgfPattImplArg>::untagged(patt);
-        pgf_patt_free(pimpl->patt);
-        PgfDB::free(pimpl);
-        break;
-	}
-	case PgfPattTilde::tag: {
-        auto ptilde = ref<PgfPattTilde>::untagged(patt);
-        pgf_patt_free(ptilde->expr);
-        PgfDB::free(ptilde);
-        break;
-	}
-	default:
-		throw pgf_error("Unknown pattern tag");
-    }
+    PgfDB::free(dtyp, dtyp->name.size+1);
 }
