@@ -1,22 +1,22 @@
 name: gf
-version: 3.11.0-git
+version: 4.0.0
 
 cabal-version: 1.22
-build-type: Custom
+build-type: Simple
 license: OtherLicense
 license-file: LICENSE
 category: Natural Language Processing, Compiler
 synopsis: Grammatical Framework
 description: GF, Grammatical Framework, is a programming language for multilingual grammar applications
+maintainer: John J. Camilleri <john@digitalgrammars.com>
 homepage: https://www.grammaticalframework.org/
 bug-reports: https://github.com/GrammaticalFramework/gf-core/issues
-tested-with: GHC==7.10.3, GHC==8.0.2, GHC==8.10.4
+tested-with: GHC==7.10.3, GHC==8.0.2, GHC==8.10.4, GHC==9.0.2, GHC==9.2.4
 
-data-dir: src
-extra-source-files: WebSetup.hs
 data-files:
   www/*.html
   www/*.css
+  www/Logos/gf0.png
   www/P/*.png
   www/gfse/*.html
   www/gfse/*.css
@@ -39,14 +39,6 @@ data-files:
   www/translator/*.css
   www/translator/*.js
 
-custom-setup
-  setup-depends:
-    base >= 4.9.1 && < 4.15,
-    Cabal >= 1.22.0.0,
-    directory >= 1.3.0 && < 1.4,
-    filepath >= 1.4.1 && < 1.5,
-    process >= 1.0.1.1 && < 1.7
-
 source-repository head
   type: git
   location: https://github.com/GrammaticalFramework/gf-core.git
@@ -64,10 +56,9 @@ flag network-uri
    default: True
 
 executable gf
-  hs-source-dirs: src/programs, src/compiler
   main-is: gf-main.hs
   default-language:    Haskell2010
-  build-depends: pgf2,
+  build-depends: pgf2 >= 4.0.0,
                  base >= 4.6 && <5,
                  array,
                  containers,
@@ -76,11 +67,40 @@ executable gf
                  random,
                  pretty,
                  mtl,
-                 exceptions,
                  ghc-prim,
                  filepath, directory>=1.2, time,
                  process, haskeline, parallel>=3, json
   ghc-options: -threaded
+-- --flag new-comp
+-- --  Description: Make -new-comp the default
+-- --  Default:     True
+
+-- flag c-runtime
+--   Description: Include functionality from the C run-time library (which must be installed already)
+--   Default: False
+
+-- library
+--   default-language: Haskell2010
+--   build-depends:
+--     -- GHC 8.0.2 to GHC 8.10.4
+--     array >= 0.5.1 && < 0.6,
+--     base >= 4.9.1 && < 4.17,
+--     bytestring >= 0.10.8 && < 0.12,
+--     containers >= 0.5.7 && < 0.7,
+--     exceptions >= 0.8.3 && < 0.11,
+--     ghc-prim >= 0.5.0 && < 0.9.0,
+--     mtl >= 2.2.1 && < 2.3,
+--     pretty >= 1.1.3 && < 1.2,
+--     random >= 1.1 && < 1.3,
+--     utf8-string >= 1.0.1.1 && < 1.1
+
+--   if impl(ghc<8.0)
+--     build-depends:
+--       -- We need this in order for ghc-7.10 to build
+--       transformers-compat >= 0.6.3 && < 0.7,
+--       fail >= 4.9.0 && < 4.10
+
+--   hs-source-dirs: src/runtime/haskell
 
   other-modules:
     GF
@@ -109,8 +129,6 @@ executable gf
     GF.Command.TreeOperations
     GF.Compile.CFGtoPGF
     GF.Compile.CheckGrammar
-    GF.Compile.Compute.Predef
-    GF.Compile.Compute.Value
     GF.Compile.Compute.Concrete
     GF.Compile.ExampleBased
     GF.Compile.Export
@@ -118,7 +136,6 @@ executable gf
     GF.Compile.GeneratePMCFG
     GF.Compile.GrammarToPGF
     GF.Compile.Multi
-    GF.Compile.Optimize
     GF.Compile.OptimizePGF
     GF.Compile.PGFtoHaskell
     GF.Compile.PGFtoJava
@@ -126,7 +143,6 @@ executable gf
     GF.Compile.ConcreteToHaskell
     GF.Compile.GrammarToCanonical
     GF.Grammar.CanonicalJSON
-    GF.Compile.PGFtoJSON
     GF.Compile.ReadFiles
     GF.Compile.Rename
     GF.Compile.SubExOpt
@@ -196,10 +212,9 @@ executable gf
     GF.System.NoSignal
     GF.Text.Clitics
     GF.Text.Coding
-    GF.Text.Lexing
     GF.Text.Transliterations
     Paths_gf
-    
+
     -- not really part of GF but I have changed the original binary library
     -- and we have to keep the copy for now.
     Data.Binary
@@ -216,12 +231,38 @@ executable gf
       terminfo >=0.4.0 && < 0.5,
       unix >= 2.7.2 && < 2.8
 
+  if flag(server)
+    build-depends:
+      pgf-service,
+      http-slim,
+      network>=2.3 && <3.2
+    if flag(network-uri)
+      build-depends:
+        network-uri >= 2.6.1.0 && < 2.7,
+        network>=2.6 && <3.2
+    else
+      build-depends:
+        network >= 2.5 && <3.2
+
+    cpp-options: -DSERVER_MODE
+    other-modules:
+      GF.Server
+      GF.Server.SimpleEditor.Convert
+      GF.Server.SimpleEditor.JSON
+      GF.Server.SimpleEditor.Syntax
+
+  if flag(interrupt)
+    cpp-options: -DUSE_INTERRUPT
+    other-modules: GF.System.UseSignal
+  else
+    other-modules: GF.System.NoSignal
+
 test-suite gf-tests
   type: exitcode-stdio-1.0
   main-is: run.hs
   hs-source-dirs: testsuite
   build-depends:
-    base >= 4.9.1 && < 4.15,
+    base >= 4.9.1 && < 4.16,
     Cabal >= 1.8,
     directory >= 1.3.0 && < 1.4,
     filepath >= 1.4.1 && < 1.5,
