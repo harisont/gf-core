@@ -10,10 +10,11 @@ import GF.Grammar.Lookup
 import GF.Grammar.Predef
 import GF.Grammar.PatternMatch
 import GF.Grammar.Lockfield (isLockLabel, lockRecType, unlockRecord)
+import GF.Compile.Compute.Concrete(normalForm)
 import GF.Compile.TypeCheck.Primitives
 
 import Data.List
-import Data.Maybe(fromMaybe)
+import Data.Maybe(fromMaybe,isJust,isNothing)
 import Control.Monad
 import GF.Text.Pretty
 
@@ -124,7 +125,7 @@ inferLType gr g trm = case trm of
          case fty' of
            Prod bt z arg val -> do
              a' <- justCheck g a arg
-             ty <- if isWildIdent z
+             ty <- if z == identW
                       then return val
                       else substituteLType [(bt,z,a')] val
              return (App f' a',ty)
@@ -179,15 +180,12 @@ inferLType gr g trm = case trm of
 --   return (trm, Table arg val) -- old, caused issue 68
      checkLType gr g trm (Table arg val)
 
-   K s  -> do
-     if elem ' ' s
-        then do
-          let ss = foldr C Empty (map K (words s))
-          ----- removed irritating warning AR 24/5/2008
-          ----- checkWarn ("token \"" ++ s ++
-          -----              "\" converted to token list" ++ prt ss)
-          return (ss, typeStr)
-        else return (trm, typeStr)
+   K s  ->
+     let trm' = case words s of
+                  []     -> Empty
+                  [w]    -> K w
+                  (w:ws) -> foldl (\t -> C t . K) (K w) ws
+     in return (trm', typeStr)
 
    EInt i -> return (trm, typeInt)
 
@@ -215,6 +213,13 @@ inferLType gr g trm = case trm of
      aa' <- flip mapM aa (\ (c,v) -> do
         c' <- justCheck g c typeStr
         v' <- checks $ map (justCheck g v) [typeStrs, EPattType typeStr]
+        v' <- case v' of
+                Q q -> do t <- lookupResDef gr q
+                          t <- normalForm gr t
+                          case t of
+                            EPatt _ _ p -> mkStrs p
+                            _           -> return v'
+                _   -> return v'
         return (c',v'))
      return (Alts t' aa', typeStr)
 
@@ -224,12 +229,7 @@ inferLType gr g trm = case trm of
      return (RecType (zip ls ts'), typeType)
 
    ExtR r s -> do
-
----     over <- getOverload gr g Nothing r
----     let r1 = maybe r fst over
-     let r1 = r ---
-
-     (r',rT) <- inferLType gr g r1
+     (r',rT) <- inferLType gr g r
      rT'     <- computeLType gr g rT
 
      (s',sT) <- inferLType gr g s
@@ -267,7 +267,7 @@ inferLType gr g trm = case trm of
      return (EPattType ty',typeType)
    EPatt _ _ p -> do
      ty <- inferPatt p
-     let (minp,maxp,p') = measurePatt gr p
+     (minp,maxp,p') <- measurePatt gr p
      return (EPatt minp maxp p', EPattType ty)
 
    ELin c trm -> do
@@ -324,35 +324,48 @@ inferLType gr g trm = case trm of
 
 measurePatt gr p =
   case p of
-    PM q       -> case lookupResDef gr q of
-                    Ok t    -> case t of
-                                 EPatt minp maxp _ -> (minp,maxp,p)
-                                 _ -> error "Expected pattern macro"
-                    Bad msg -> error msg
-    PR ass     -> let p' = PR (map (\(lbl,p) -> let (_,_,p') = measurePatt gr p in (lbl,p')) ass)
-                  in (0,Nothing,p')
-    PString s  -> let len=length s
-                  in (len,Just len,p)
-    PT t p     -> let (min,max,p') = measurePatt gr p
-                  in (min,max,PT t p')
-    PAs x p    -> let (min,max,p') = measurePatt gr p
-                  in (min,max,PAs x p')
-    PImplArg p -> let (min,max,p') = measurePatt gr p
-                  in (min,max,PImplArg p')
-    PNeg p     -> let (_,_,p') = measurePatt gr p
-                  in (0,Nothing,PNeg p')
-    PAlt p1 p2 -> let (min1,max1,p1') = measurePatt gr p1
-                      (min2,max2,p2') = measurePatt gr p2
-                  in (min min1 min2,liftM2 max max1 max2,PAlt p1' p2')
+    PM q       -> do t <- lookupResDef gr q
+                     t <- normalForm gr t
+                     case t of
+                       EPatt minp maxp _ -> return (minp,maxp,p)
+                       _                 -> checkError ("Expected pattern macro, but found:" $$ nest 2 (pp t))
+    PR ass     -> do ass <- mapM (\(lbl,p) -> measurePatt gr p >>= \(_,_,p') -> return (lbl,p')) ass
+                     return (0,Nothing,PR ass)
+    PString s  -> do let len=length s
+                     return (len,Just len,p)
+    PT t p     -> do (min,max,p') <- measurePatt gr p
+                     return (min,max,PT t p')
+    PAs x p    -> do (min,max,p) <- measurePatt gr p
+                     case p of
+                       PW -> return (0,Nothing,PV x)
+                       _  -> return (min,max,PAs x p)
+    PImplArg p -> do (min,max,p') <- measurePatt gr p
+                     return (min,max,PImplArg p')
+    PNeg p     -> do (_,_,p') <- measurePatt gr p
+                     return (0,Nothing,PNeg p')
+    PAlt p1 p2 -> do (min1,max1,p1) <- measurePatt gr p1
+                     (min2,max2,p2) <- measurePatt gr p2
+                     case (p1,p2) of
+                       (PString [c1],PString [c2]) -> return (1,Just 1,PChars [c1,c2])
+                       (PString [c], PChars cs)    -> return (1,Just 1,PChars ([c]++cs))
+                       (PChars cs,   PString [c])  -> return (1,Just 1,PChars (cs++[c]))
+                       (PChars cs1,  PChars cs2)   -> return (1,Just 1,PChars (cs1++cs2))
+                       _                           -> return (min min1 min2,liftM2 max max1 max2,PAlt p1 p2)
     PSeq _ _ p1 _ _ p2
-               -> let (min1,max1,p1') = measurePatt gr p1
-                      (min2,max2,p2') = measurePatt gr p2
-                  in (min1+min2,liftM2 (+) max1 max2,PSeq min1 max1 p1' min2 max2 p2')
-    PRep _ _ p -> let (minp,maxp,p') = measurePatt gr p
-                  in (0,Nothing,PRep minp maxp p')
-    PChar      -> (1,Just 1,p)
-    PChars _   -> (1,Just 1,p)
-    _          -> (0,Nothing,p)
+               -> do (min1,max1,p1) <- measurePatt gr p1
+                     (min2,max2,p2) <- measurePatt gr p2
+                     case (p1,p2) of
+                       (PW,        PW        ) -> return (0,Nothing,PW)
+                       (PString s1,PString s2) -> return (min1+min2,liftM2 (+) max1 max2,PString (s1++s2))
+                       _                       -> return (min1+min2,liftM2 (+) max1 max2,PSeq min1 max1 p1 min2 max2 p2)
+    PRep _ _ p -> do (minp,maxp,p) <- measurePatt gr p
+                     case p of
+                       PW    -> return (0,Nothing,PW)
+                       PChar -> return (0,Nothing,PW)
+                       _     -> return (0,Nothing,PRep minp maxp p)
+    PChar      -> return (1,Just 1,p)
+    PChars _   -> return (1,Just 1,p)
+    _          -> return (0,Nothing,p)
 
 -- type inference: Nothing, type checking: Just t
 -- the latter permits matching with value type
@@ -466,7 +479,7 @@ checkLType gr g trm typ0 = do
     Abs bt x c -> do
       case typ of
         Prod bt' z a b -> do
-          (c',b') <- if isWildIdent z
+          (c',b') <- if z == identW
                        then checkLType gr ((bt,x,a):g) c b
                        else do b' <- checkIn (pp "abs") $ substituteLType [(bt',z,Vr x)] b
                                checkLType gr ((bt,x,a):g) c b'
@@ -543,23 +556,32 @@ checkLType gr g trm typ0 = do
 
        RecType rr -> do
 
-         ll2 <- case s of
-           R ss -> return $ map fst ss
+         (fields1,fields2) <- case s of
+           R ss -> return (partition (\(l,_) -> isNothing (lookup l ss)) rr)
            _ -> do
              (s',typ2) <- inferLType gr g s
              case typ2 of
-               RecType ss -> return $ map fst ss
+               RecType ss -> return (partition (\(l,_) -> isNothing (lookup l ss)) rr)
                _ ->  checkError ("cannot get labels from" $$ nest 2 (ppTerm Unqualified 0 typ2))
-         let ll1 = [l | (l,_) <- rr, notElem l ll2]
 
----         over <- getOverload gr g Nothing r --- this would solve #66 but fail ParadigmsAra. AR 6/7/2020
----         let r1 = maybe r fst over
-         let r1 = r ---
+         (r',_) <- checkLType gr g r (RecType fields1)
+         (s',_) <- checkLType gr g s (RecType fields2)
 
-         (r',_) <- checkLType gr g r1 (RecType [field | field@(l,_) <- rr, elem l ll1])
-         (s',_) <- checkLType gr g s  (RecType [field | field@(l,_) <- rr, elem l ll2])
+         let withProjection t fields g f =
+               case t of
+                 R rs -> f g (\l -> case lookup l rs of
+                                      Just (_,t) -> t
+                                      Nothing    -> error (render ("no value for label" <+> l)))
+                 QC _ -> f g (\l -> P t l)
+                 Vr _ -> f g (\l -> P t l)
+                 _    -> if length fields == 1
+                           then f g (\l -> P t l)
+                           else let x = mkFreshVar (map (\(_,x,_) -> x) g) (identS "x")
+                                in Let (x, (Nothing, t)) (f ((Explicit,x,RecType fields):g) (\l -> P (Vr x) l))
 
-         let rec = R ([(l,(Nothing,P r' l)) | l <- ll1] ++ [(l,(Nothing,P s' l)) | l <- ll2])
+             rec = withProjection r' fields1 g $ \g p_r' ->
+                   withProjection s' fields2 g $ \g p_s' ->
+                     R ([(l,(Nothing,p_r' l)) | (l,_) <- fields1] ++ [(l,(Nothing,p_s' l)) | (l,_) <- fields2])
          return (rec, typ)
 
        ExtR ty ex -> do
@@ -630,7 +652,7 @@ checkLType gr g trm typ0 = do
    checkCase arg val (p,t) = do
      cont <- pattContext gr g arg p
      t' <- justCheck (reverse cont ++ g) t val
-     let (_,_,p') = measurePatt gr p
+     (_,_,p') <- measurePatt gr p
      return (p',t')
 
 pattContext :: SourceGrammar -> Context -> Type -> Patt -> Check Context
@@ -822,12 +844,7 @@ ppType ty =
                       _      -> ppTerm Unqualified 0 ty
     Prod _ x a b -> ppType a <+> "->" <+> ppType b
     _            -> ppTerm Unqualified 0 ty
-{-
-ppqType :: Type -> Type -> Doc
-ppqType t u = case (ppType t, ppType u) of
-  (pt,pu) | render pt == render pu -> ppTerm Qualified 0 t
-  (pt,_) -> pt
--}
+
 checkLookup :: Ident -> Context -> Check Type
 checkLookup x g =
   case [ty | (b,y,ty) <- g, x == y] of

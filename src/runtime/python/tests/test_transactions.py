@@ -1,13 +1,16 @@
+import os.path
 import pytest
 from pgf import *
 import math
+
+pgf_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))+"/haskell/tests/"
 
 ty = readType("(N -> N) -> P (s z)")
 prob = math.pi
 
 @pytest.fixture(scope="function")
 def gr1():
-    gr = readPGF("../haskell/tests/basic.pgf")
+    gr = readPGF(pgf_path+"basic.pgf")
     yield gr
 
 @pytest.fixture(scope="function")
@@ -28,18 +31,6 @@ def gr3(gr1):
     yield gr
 
 @pytest.fixture(scope="function")
-def gr4(gr2):
-    gr = gr2
-    gr.checkoutBranch("master")
-    yield gr
-
-@pytest.fixture(scope="function")
-def gr5(gr3):
-    gr = gr3
-    gr.checkoutBranch("bar_branch")
-    yield gr
-
-@pytest.fixture(scope="function")
 def gr6(gr1):
     gr = gr1
     with gr.newTransaction() as t:
@@ -47,16 +38,10 @@ def gr6(gr1):
         t.dropCategory("S")
     yield gr
 
-# general
-
-def test_checkout_non_existant(gr1):
-    with pytest.raises(KeyError):
-        gr1.checkoutBranch("abc")
-
 # gr1
 
 def test_original_functions(gr1):
-    assert gr1.functions == ["c", "ind", "s", "z"]
+    assert gr1.functions == ['c', 'floatLit', 'ind', 'intLit', 'nat', 's', 'stringLit', 'z']
 
 def test_original_categories(gr1):
     assert gr1.categories == ["Float","Int","N","P","S","String"]
@@ -83,7 +68,7 @@ def test_original_expr_prob(gr1):
 # gr2
 
 def test_extended_functions(gr2):
-    assert gr2.functions == ["c", "foo", "ind", "s", "z"]
+    assert gr2.functions == ['c', 'floatLit', "foo", 'ind', 'intLit', 'nat', 's', 'stringLit', 'z']
 
 def test_extended_categories(gr2):
     assert gr2.categories == ["Float","Int","N","P","Q","S","String"]
@@ -107,7 +92,7 @@ def test_extended_expr_prob(gr2):
 # gr3
 
 def test_branched_functions(gr3):
-    assert gr3.functions == ["bar", "c", "ind", "s", "z"]
+    assert gr3.functions == ["bar", 'c', 'floatLit', 'ind', 'intLit', 'nat', 's', 'stringLit', 'z']
 
 def test_branched_categories(gr3):
     assert gr3.categories == ["Float","Int","N","P","R","S","String"]
@@ -118,18 +103,10 @@ def test_branched_category_context(gr3):
 def test_branched_function_type(gr3):
     assert gr3.functionType("bar") == ty
 
-# gr4, 5
-
-def test_branched_functions(gr4):
-    assert gr4.functions == ["c", "foo", "ind", "s", "z"]
-
-def test_branched_functions(gr5):
-    assert gr5.functions == ["bar", "c", "ind", "s", "z"]
-
 # gr6
 
 def test_reduced_functions(gr6):
-    assert gr6.functions == ["c", "s", "z"]
+    assert gr6.functions == ['nat', 's', 'z']
 
 def test_reduced_categories(gr6):
     assert gr6.categories == ["Float","Int","N","P","String"]

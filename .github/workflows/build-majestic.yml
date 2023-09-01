@@ -7,12 +7,14 @@ env:
 
 jobs:
 
-  ubuntu-runtime:
-    name: Runtime (Ubuntu)
+  linux-runtime:
+    name: Runtime (Linux)
     runs-on: ubuntu-20.04
+    container:
+      image: quay.io/pypa/manylinux2014_x86_64:2023-01-14-103cb93
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Build runtime
       working-directory: ./src/runtime/c
@@ -20,95 +22,117 @@ jobs:
         autoreconf -i
         ./configure
         make
-        sudo make install
+        make install
 
     - name: Upload artifact
       uses: actions/upload-artifact@master
       with:
-        name: libpgf-ubuntu
+        name: libpgf-linux
         path: |
           /usr/local/lib/libpgf*
           /usr/local/include/pgf
 
-  ubuntu-haskell:
-    name: Haskell (Ubuntu)
+  linux-haskell:
+    name: Haskell (Linux)
     runs-on: ubuntu-20.04
-    needs: ubuntu-runtime
+    needs: linux-runtime
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Download artifact
       uses: actions/download-artifact@master
       with:
-        name: libpgf-ubuntu
+        name: libpgf-linux
     - run: |
         sudo mv lib/* /usr/local/lib/
         sudo mv include/* /usr/local/include/
 
     - name: Setup Haskell
-      uses: haskell/actions/setup@v1
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: 8
 
-    - name: Build & run testsuite
+    - name: Install Haskell build tools
+      run: |
+        cabal v1-install alex happy
+
+    - name: build and test the runtime
       working-directory: ./src/runtime/haskell
       run: |
+        cabal v1-install --extra-lib-dirs=/usr/local/lib
         cabal test --extra-lib-dirs=/usr/local/lib
 
-  ubuntu-python:
-    name: Python (Ubuntu)
+    - name: build the compiler
+      working-directory: ./src/compiler
+      run: |
+        cabal v1-install
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@master
+      with:
+        name: compiler-linux
+        path: |
+          ~/.cabal/bin/gf
+
+  linux-python:
+    name: Python (Linux)
     runs-on: ubuntu-20.04
-    needs: ubuntu-runtime
+    needs: linux-runtime
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Download artifact
       uses: actions/download-artifact@master
       with:
-        name: libpgf-ubuntu
-    - run: |
-        sudo mv lib/* /usr/local/lib/
-        sudo mv include/* /usr/local/include/
+        name: libpgf-linux
 
-    - name: Install bindings
-      working-directory: ./src/runtime/python
+    - name: Install cibuildwheel
       run: |
-        python setup.py build
-        sudo python setup.py install
+        python3 -m pip install git+https://github.com/joerick/cibuildwheel.git@main
 
-    - name: Run testsuite
-      working-directory: ./src/runtime/python
+    - name: Install and test bindings
+      env:
+        CIBW_BEFORE_BUILD: cp -r lib/* /usr/lib/ && cp -r include/* /usr/include/
+        CIBW_TEST_REQUIRES: pytest
+        CIBW_TEST_COMMAND: "pytest {project}/src/runtime/python"
+        CIBW_SKIP: "pp* *i686 *musllinux_x86_64"
       run: |
-        pip install pytest
-        pytest
+        python3 -m cibuildwheel src/runtime/python --output-dir wheelhouse
 
-  ubuntu-javascript:
-    name: JavaScript (Ubuntu)
-    runs-on: ubuntu-20.04
-    needs: ubuntu-runtime
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Download artifact
-      uses: actions/download-artifact@master
+    - uses: actions/upload-artifact@master
       with:
-        name: libpgf-ubuntu
-    - run: |
-        sudo mv lib/* /usr/local/lib/
-        sudo mv include/* /usr/local/include/
+        name: python-linux
+        path: ./wheelhouse
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '12'
-
-    - name: Install dependencies
-      working-directory: ./src/runtime/javascript
-      run: |
-        npm ci
-
-    - name: Run testsuite
-      working-directory: ./src/runtime/javascript
-      run: |
-        npm run test
+#  linux-javascript:
+#    name: JavaScript (Linux)
+#    runs-on: ubuntu-20.04
+#    needs: linux-runtime
+#
+#    steps:
+#    - uses: actions/checkout@v3
+#    - name: Download artifact
+#      uses: actions/download-artifact@master
+#      with:
+#        name: libpgf-linux
+#    - run: |
+#        sudo mv lib/* /usr/local/lib/
+#        sudo mv include/* /usr/local/include/
+#
+#    - name: Setup Node.js
+#      uses: actions/setup-node@v2
+#      with:
+#        node-version: '12'
+#
+#    - name: Install dependencies
+#      working-directory: ./src/runtime/javascript
+#      run: |
+#        npm ci
+#
+#    - name: Run testsuite
+#      working-directory: ./src/runtime/javascript
+#      run: |
+#        npm run test
 
   ubuntu-java:
     name: Java (Ubuntu)
@@ -149,7 +173,7 @@ jobs:
     runs-on: macOS-11
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Install build tools
       run: |
@@ -181,7 +205,7 @@ jobs:
     needs: macos-runtime
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Download artifact
       uses: actions/download-artifact@master
       with:
@@ -190,7 +214,9 @@ jobs:
         sudo mv lib/* /usr/local/lib/
         sudo mv include/* /usr/local/include/
     - name: Setup Haskell
-      uses: haskell/actions/setup@v1
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: 8
 
     - name: Build & run testsuite
       working-directory: ./src/runtime/haskell
@@ -201,9 +227,12 @@ jobs:
     name: Python (macOS)
     runs-on: macOS-11
     needs: macos-runtime
+    env:
+      EXTRA_INCLUDE_DIRS: /usr/local/include
+      EXTRA_LIB_DIRS: /usr/local/lib
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Download artifact
       uses: actions/download-artifact@master
       with:
@@ -212,44 +241,159 @@ jobs:
         sudo mv lib/* /usr/local/lib/
         sudo mv include/* /usr/local/include/
 
-    - name: Install bindings
-      working-directory: ./src/runtime/python
+    - name: Install cibuildwheel
       run: |
-        python3 setup.py build
-        sudo python3 setup.py install
+        python3 -m pip install git+https://github.com/joerick/cibuildwheel.git@main
 
-    - name: Run testsuite
-      working-directory: ./src/runtime/python
+    - name: Install and test bindings
+      env:
+        CIBW_TEST_REQUIRES: pytest
+        CIBW_TEST_COMMAND: "pytest {project}/src/runtime/python"
+        CIBW_SKIP: "pp* cp36*"
       run: |
-        pip3 install pytest
-        pytest
+        python3 -m cibuildwheel src/runtime/python --output-dir wheelhouse
 
-  macos-javascript:
-    name: JavaScript (macOS)
-    runs-on: macOS-11
-    needs: macos-runtime
+    - uses: actions/upload-artifact@master
+      with:
+        name: python-macos
+        path: ./wheelhouse
+
+#  macos-javascript:
+#   name: JavaScript (macOS)
+#    runs-on: macOS-11
+#    needs: macos-runtime
+#
+#    steps:
+#    - uses: actions/checkout@v3
+#    - name: Download artifact
+#      uses: actions/download-artifact@master
+#      with:
+#        name: libpgf-macos
+#    - run: |
+#        sudo mv lib/* /usr/local/lib/
+#        sudo mv include/* /usr/local/include/
+#
+#    - name: Setup Node.js
+#      uses: actions/setup-node@v2
+#      with:
+#        node-version: '12'
+#
+#    - name: Install dependencies
+#      working-directory: ./src/runtime/javascript
+#      run: |
+#        npm ci
+#
+#    - name: Run testsuite
+#      working-directory: ./src/runtime/javascript
+#      run: |
+#        npm run test
+
+# ----------------------------------------------------------------------------
+
+  mingw64-runtime:
+    name: Runtime (MinGW64)
+    runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Download artifact
-      uses: actions/download-artifact@master
+    - uses: actions/checkout@v3
+    
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
       with:
-        name: libpgf-macos
-    - run: |
-        sudo mv lib/* /usr/local/lib/
-        sudo mv include/* /usr/local/include/
+        msystem: MINGW64
+        install: >-
+          base-devel
+          autoconf
+          automake
+          libtool
+          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-libtool
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v2
+    - name: Build runtime
+      shell: msys2 {0}
+      working-directory: ./src/runtime/c
+      run: |
+        autoreconf -i
+        ./configure
+        make
+        make install
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@master
       with:
-        node-version: '12'
+        name: libpgf-windows
+        path: |
+          ${{runner.temp}}/msys64/mingw64/bin/libpgf*
+          ${{runner.temp}}/msys64/mingw64/bin/libgcc_s_seh-1.dll
+          ${{runner.temp}}/msys64/mingw64/bin/libstdc++-6.dll
+          ${{runner.temp}}/msys64/mingw64/bin/libwinpthread-1.dll
+          ${{runner.temp}}/msys64/mingw64/lib/libpgf*
+          ${{runner.temp}}/msys64/mingw64/include/pgf
 
-    - name: Install dependencies
-      working-directory: ./src/runtime/javascript
-      run: |
-        npm ci
+  windows-python:
+    name: Python (Windows)
+    runs-on: windows-latest
 
-    - name: Run testsuite
-      working-directory: ./src/runtime/javascript
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install cibuildwheel
       run: |
-        npm run test
+        python3 -m pip install git+https://github.com/joerick/cibuildwheel.git@main
+
+    - name: Install and test bindings
+      env:
+        CIBW_TEST_REQUIRES: pytest
+        CIBW_TEST_COMMAND: "pytest   {project}\\src\\runtime\\python"
+        CIBW_SKIP: "pp* *-win32"
+      run: |
+        python3 -m cibuildwheel src\runtime\python --output-dir wheelhouse
+
+    - uses: actions/upload-artifact@master
+      with:
+        name: python-windows
+        path: ./wheelhouse
+
+  upload_pypi:
+    name: Upload to PyPI
+    needs: [linux-python, macos-python, windows-python]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/majestic' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
+
+      - name: Install twine
+        run: pip install twine
+
+      - uses: actions/download-artifact@master
+        with:
+          name: python-linux
+          path: ./dist
+
+      - uses: actions/download-artifact@master
+        with:
+          name: python-macos
+          path: ./dist
+
+      - uses: actions/download-artifact@master
+        with:
+          name: python-windows
+          path: ./dist
+
+#      - name: Publish
+#        env:
+#          TWINE_USERNAME: __token__
+#          TWINE_PASSWORD: ${{ secrets.pypi_password }}
+#        run: |
+#          (cd ./src/runtime/python && curl -I --fail https://pypi.org/project/$(python setup.py --name)/$(python setup.py --version)/) || twine upload --skip-existing dist/*

@@ -7,7 +7,6 @@ import qualified Data.ByteString.UTF8 as UTF8(fromString)
 import qualified Data.Map as Map
 
 import GF.Infra.SIO(MonadSIO(..),restricted)
-import GF.Infra.Option(modifyFlags,optTrace) --,noOptions
 import GF.Infra.Dependencies(depGraph)
 import GF.Infra.CheckM
 import GF.Text.Pretty(render,pp)
@@ -256,8 +255,7 @@ checkComputeTerm os sgr t =
   do mo <- maybe (checkError (pp "no source grammar in scope")) return $
            greatestResource sgr
      t <- renameSourceTerm sgr mo t
-     (t,_) <- inferLType sgr [] t                                
-     let opts = modifyFlags (\fs->fs{optTrace=isOpt "trace" os})
+     (t,_) <- inferLType sgr [] t
      fmap evalStr (normalForm sgr t)
   where
     -- ** Try to compute pre{...} tokens in token sequences

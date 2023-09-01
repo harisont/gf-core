@@ -4,7 +4,7 @@ module GF.Infra.Option
      -- *** Option types
      Options,
      Flags(..),
-     Mode(..), Phase(..), Verbosity(..),
+     Mode(..), Phase(..), Verbosity(..), RetainMode(..),
      OutputFormat(..),
      SISRFormat(..), Optimization(..), CFGTransform(..), HaskellOption(..),
      Dump(..), Pass(..), Recomp(..),
@@ -146,6 +146,9 @@ data Pass = Source | Rebuild | Extend | Rename | TypeCheck | Refresh | Optimize 
 data Recomp = AlwaysRecomp | RecompIfNewer | NeverRecomp
   deriving (Show,Eq,Ord)
 
+data RetainMode = RetainAll | RetainSource | RetainCompiled
+  deriving Show
+
 data Flags = Flags {
       optMode            :: Mode,
       optStopAfterPhase  :: Phase,
@@ -153,6 +156,7 @@ data Flags = Flags {
       optShowCPUTime     :: Bool,
       optOutputFormats   :: [OutputFormat],
       optLinkTargets     :: (Bool,Bool), -- pgf,ngf files
+      optBlank           :: Maybe String,
       optSISR            :: Maybe SISRFormat,
       optHaskellOptions  :: Set HaskellOption,
       optLexicalCats     :: Set String,
@@ -163,14 +167,13 @@ data Flags = Flags {
       optDocumentRoot    :: Maybe FilePath, -- For --server mode
       optRecomp          :: Recomp,
       optProbsFile       :: Maybe FilePath,
-      optRetainResource  :: Bool,
+      optRetainResource  :: RetainMode,
       optName            :: Maybe String,
       optPreprocessors   :: [String],
       optEncoding        :: Maybe String,
       optPMCFG           :: Bool,
       optOptimizations   :: Set Optimization,
       optOptimizePGF     :: Bool,
-      optSplitPGF        :: Bool,
       optCFGTransforms   :: Set CFGTransform,
       optLibraryPath     :: [FilePath],
       optStartCat        :: Maybe String,
@@ -183,10 +186,9 @@ data Flags = Flags {
       optHeuristicFactor :: Maybe Double,
       optCaseSensitive   :: Bool,
       optPlusAsBind      :: Bool,
-      optJobs            :: Maybe (Maybe Int),
-      optTrace           :: Bool
+      optJobs            :: Maybe (Maybe Int)
     }
-  deriving (Show)
+  deriving Show
 
 newtype Options = Options (Flags -> Flags)
 
@@ -264,9 +266,10 @@ defaultFlags = Flags {
       optShowCPUTime     = False,
       optOutputFormats   = [],
       optLinkTargets     = (True,False),
+      optBlank           = Nothing,
       optSISR            = Nothing,
       optHaskellOptions  = Set.empty,
-      optLiteralCats     = Set.fromList [cString,cInt,cFloat,cVar],
+      optLiteralCats     = Set.fromList [cString,cInt,cFloat],
       optLexicalCats     = Set.empty,
       optGFODir          = Nothing,
       optOutputDir       = Nothing,
@@ -274,7 +277,7 @@ defaultFlags = Flags {
       optDocumentRoot    = Nothing,
       optRecomp          = RecompIfNewer,
       optProbsFile       = Nothing,
-      optRetainResource  = False,
+      optRetainResource  = RetainCompiled,
 
       optName            = Nothing,
       optPreprocessors   = [],
@@ -282,7 +285,6 @@ defaultFlags = Flags {
       optPMCFG           = True,
       optOptimizations   = Set.fromList [OptStem,OptCSE,OptExpand,OptParametrize],
       optOptimizePGF     = False,
-      optSplitPGF        = False,
       optCFGTransforms   = Set.fromList [CFGRemoveCycles, CFGBottomUpFilter,
                                          CFGTopDownFilter, CFGMergeIdentical],
       optLibraryPath     = [],
@@ -296,8 +298,7 @@ defaultFlags = Flags {
       optHeuristicFactor = Nothing,
       optCaseSensitive   = True,
       optPlusAsBind      = False,
-      optJobs            = Nothing,
-      optTrace           = False
+      optJobs            = Nothing
     }
 
 -- | Option descriptions
@@ -324,10 +325,9 @@ optDescr =
      Option [] ["make"] (NoArg (liftM2 addOptions (mode ModeCompiler) (phase Link))) "Build .pgf file and other output files and exit.",
      Option [] ["boot"] (NoArg (set $ \o -> o {optLinkTargets = (True,True)})) "Boot an .ngf database for fast grammar reloading",
      Option [] ["boot-only"] (NoArg (set $ \o -> o {optLinkTargets = (False,True)})) "Boot the .ngf database and don't write a .pgf file",
+     Option [] ["blank"] (ReqArg (\x -> set $ \o -> o { optBlank = Just x }) "ABSTR_NAME") "Create a blank database with an empty abstract syntax.",
      Option [] ["cpu"] (NoArg (cpu True)) "Show compilation CPU time statistics.",
      Option [] ["no-cpu"] (NoArg (cpu False)) "Don't show compilation CPU time statistics (default).",
---   Option ['t'] ["trace"] (NoArg (trace True)) "Trace computations",
---   Option [] ["no-trace"] (NoArg (trace False)) "Don't trace computations",
      Option [] ["gfo-dir"] (ReqArg gfoDir "DIR") "Directory to put .gfo files in (default = '.').",
      Option ['f'] ["output-format"] (ReqArg outFmt "FMT")
         (unlines ["Output format. FMT can be one of:",
@@ -355,7 +355,8 @@ optDescr =
                  "(default) Recompile from source if the source is newer than the .gfo file.",
      Option [] ["gfo","no-recomp"] (NoArg (recomp NeverRecomp))
                  "Never recompile from source, if there is already .gfo file.",
-     Option [] ["retain"] (NoArg (set $ \o -> o { optRetainResource = True })) "Retain opers.",
+     Option [] ["retain"]   (NoArg (set $ \o -> o { optRetainResource = RetainAll })) "Retain the source and well as the compiled grammar.",
+     Option [] ["resource"] (NoArg (set $ \o -> o { optRetainResource = RetainSource })) "Load the source grammar as a resource only.",
      Option [] ["probs"] (ReqArg probsFile "file.probs") "Read probabilities from file.",
      Option ['n'] ["name"] (ReqArg name "NAME")
            (unlines ["Use NAME as the name of the output. This is used in the output file names, ",
@@ -378,8 +379,6 @@ optDescr =
                 "Select an optimization package. OPT = all | values | parametrize | none",
      Option [] ["optimize-pgf"] (NoArg (optimize_pgf True))
                 "Enable or disable global grammar optimization. This could significantly reduce the size of the final PGF file",
-     Option [] ["split-pgf"] (NoArg (splitPGF True))
-                "Split the PGF into one file per language. This allows the runtime to load only individual languages",
      Option [] ["cfg"] (ReqArg cfgTransform "TRANS") "Enable or disable specific CFG transformations. TRANS = merge, no-merge, bottomup, no-bottomup, ...",
      Option [] ["heuristic_search_factor"] (ReqArg (readDouble (\d o -> o { optHeuristicFactor = Just d })) "FACTOR") "Set the heuristic search factor for statistical parsing",
      Option [] ["case_sensitive"] (onOff (\v -> set $ \o -> o{optCaseSensitive=v}) True) "Set the parser in case-sensitive/insensitive mode [sensitive by default]",
@@ -414,7 +413,6 @@ optDescr =
                                         Just i  -> set $ \o -> o { optVerbosity = i }
                                         Nothing -> fail $ "Bad verbosity: " ++ show v
        cpu         x = set $ \o -> o { optShowCPUTime = x }
---     trace       x = set $ \o -> o { optTrace = x }
        gfoDir      x = set $ \o -> o { optGFODir = Just x }
        outFmt      x = readOutputFormat x >>= \f ->
                          set $ \o -> o { optOutputFormats = optOutputFormats o ++ [f] }
@@ -451,7 +449,6 @@ optDescr =
                          Nothing -> fail $ "Unknown optimization package: " ++ x
 
        optimize_pgf x = set $ \o -> o { optOptimizePGF = x }
-       splitPGF x = set $ \o -> o { optSplitPGF = x }
 
        cfgTransform x = let (x', b) = case x of
                                         'n':'o':'-':rest -> (rest, False)

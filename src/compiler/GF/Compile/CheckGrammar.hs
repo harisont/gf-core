@@ -202,7 +202,7 @@ checkInfo opts cwd sgr sm (c,info) = checkInModule cwd (snd sm) NoLoc empty $ do
               (Just (_,cat,cont,val),Just (L loc trm)) ->
                   chIn loc "linearization of" $ do
                      (trm,_) <- checkLType gr [] trm (mkFunType (map (\(_,_,ty) -> ty) cont) val)  -- erases arg vars
-                     return (Just (L loc trm))
+                     return (Just (L loc (etaExpand [] trm cont)))
               _ -> return mt
       mpr  <- case mpr of
                 (Just (L loc t)) ->
@@ -242,8 +242,8 @@ checkInfo opts cwd sgr sm (c,info) = checkInModule cwd (snd sm) NoLoc empty $ do
       update sm c (ResOverload os [(y,x) | (x,y) <- tysts'])
 
     ResParam (Just (L loc pcs)) _ -> do
-      (sm,cnt,ts) <- chIn loc "parameter type" $
-                        mkParamValues sm 0 [] pcs
+      (sm,cnt,ts,pcs) <- chIn loc "parameter type" $
+                            mkParamValues sm c 0 [] pcs
       update sm c (ResParam (Just (L loc pcs)) (Just (ts,cnt)))
 
     _ ->  return sm
@@ -251,14 +251,15 @@ checkInfo opts cwd sgr sm (c,info) = checkInModule cwd (snd sm) NoLoc empty $ do
    gr = prependModule sgr sm
    chIn loc cat = checkInModule cwd (snd sm) loc ("Happened in" <+> cat <+> c)
 
-   mkParamValues sm         cnt ts []          = return (sm,cnt,[])
-   mkParamValues sm@(mn,mi) cnt ts ((f,co):fs) = do
-     sm <- case lookupIdent f (jments mi) of
-             Ok (ResValue ty _) -> update sm f (ResValue ty cnt)
-             Bad msg            -> checkError (pp msg)
+   mkParamValues sm         c cnt ts []           = return (sm,cnt,[],[])
+   mkParamValues sm@(mn,mi) c cnt ts ((p,co):pcs) = do
+     co <- mapM (\(b,v,ty) -> normalForm gr ty >>= \ty -> return (b,v,ty)) co
+     sm <- case lookupIdent p (jments mi) of
+             Ok (ResValue (L loc _) _) -> update sm p (ResValue (L loc (mkProdSimple co (QC (mn,c)))) cnt)
+             Bad msg                   -> checkError (pp msg)
      vs <- liftM sequence $ mapM (\(_,_,ty) -> allParamValues gr ty) co
-     (sm,cnt,ts) <- mkParamValues sm (cnt+length vs) ts fs
-     return (sm,cnt,map (mkApp (QC (mn,f))) vs ++ ts)
+     (sm,cnt,ts,pcs) <- mkParamValues sm c (cnt+length vs) ts pcs
+     return (sm,cnt,map (mkApp (QC (mn,p))) vs ++ ts,(p,co):pcs)
 
    checkUniq xss = case xss of
      x:y:xs
@@ -281,7 +282,19 @@ checkInfo opts cwd sgr sm (c,info) = checkInModule cwd (snd sm) NoLoc empty $ do
        t' <- compAbsTyp ((x,Vr x):g) t
        return $ Prod b x a' t'
      Abs _ _ _ -> return t
-     _ -> composOp (compAbsTyp g) t  
+     _ -> composOp (compAbsTyp g) t
+
+   etaExpand xs t            []               = t
+   etaExpand xs (Abs bt x t) (_        :cont) = Abs bt x (etaExpand (x:xs) t              cont)
+   etaExpand xs t            ((bt,_,ty):cont) = Abs bt x (etaExpand (x:xs) (App t (Vr x)) cont)
+     where
+       x = freeVar 1 xs
+
+       freeVar i xs
+         | elem x xs = freeVar (i+1) xs
+         | otherwise = x
+         where
+           x = identS ("v"++show i)
 
    update (mn,mi) c info = return (mn,mi{jments=Map.insert c info (jments mi)})
 
@@ -299,21 +312,20 @@ linTypeOfType :: Grammar -> ModuleName -> L Type -> Check ([Ident],Ident,Context
 linTypeOfType cnc m (L loc typ) = do
   let (ctxt,res_cat) = typeSkeleton typ
   val <- lookLin res_cat
-  lin_args <- mapM mkLinArg (zip [0..] ctxt)
+  lin_args <- mapM mkLinArg (zip [1..] ctxt)
   let (args,arg_cats) = unzip lin_args
   return (arg_cats, snd res_cat, args, val)
  where
    mkLinArg (i,(n,mc@(m,cat))) = do
      val  <- lookLin mc
      let vars = mkRecType varLabel $ replicate n typeStr
-         symb = argIdent n cat i
      rec <- if n==0 then return val else
                        errIn (render ("extending" $$
                                       nest 2 vars $$
                                       "with" $$
                                       nest 2 val)) $
                              plusRecType vars val
-     return ((Explicit,symb,rec),cat)
+     return ((Explicit,varX i,rec),cat)
    lookLin (_,c) = checks [ --- rather: update with defLinType ?
       lookupLincat cnc m c >>= normalForm cnc
      ,return defLinType

@@ -30,8 +30,8 @@ struct PGF_INTERNAL_DECL PgfHypo {
 };
 
 struct PGF_INTERNAL_DECL PgfDTyp {
-	ref<PgfVector<PgfHypo>> hypos;
-    ref<PgfVector<PgfExpr>> exprs;
+	ref<Vector<PgfHypo>> hypos;
+    ref<Vector<PgfExpr>> exprs;
 	PgfText name;
 };
 
@@ -87,58 +87,7 @@ struct PGF_INTERNAL_DECL PgfExprImplArg {
 	PgfExpr expr;
 };
 
-// PgfPatt
-
-typedef object PgfPatt;
-
-struct PGF_INTERNAL_DECL PgfPattApp {
-    static const uint8_t tag = 0;
-
-	ref<PgfText> ctor;
-    PgfVector<PgfPatt> args;
-};
-
-struct PGF_INTERNAL_DECL PgfPattVar {
-    static const uint8_t tag = 1;
-
-	PgfText name;
-};
-
-struct PGF_INTERNAL_DECL PgfPattAs {
-    static const uint8_t tag = 2;
-
-	PgfPatt patt;
-	PgfText name;
-};
-
-struct PGF_INTERNAL_DECL PgfPattWild {
-    static const uint8_t tag = 3;
-};
-
-struct PGF_INTERNAL_DECL PgfPattLit {
-    static const uint8_t tag = 4;
-
-	PgfLiteral lit;
-};
-
-struct PGF_INTERNAL_DECL PgfPattImplArg {
-    static const uint8_t tag = 5;
-
-	PgfPatt patt;
-};
-
-struct PGF_INTERNAL_DECL PgfPattTilde {
-    static const uint8_t tag = 6;
-
-	PgfExpr expr;
-};
-
 typedef float prob_t;
-
-typedef struct {
-	prob_t prob;
-	PgfExpr expr;
-} PgfExprProb;
 
 struct PGF_INTERNAL_DECL PgfDBMarshaller : public PgfMarshaller {
     virtual object match_lit(PgfUnmarshaller *u, PgfLiteral l);
@@ -166,6 +115,12 @@ struct PGF_INTERNAL_DECL PgfDBUnmarshaller : public PgfUnmarshaller {
                          PgfText *cat,
                          size_t n_exprs, PgfExpr *exprs);
     virtual void free_ref(object x);
+};
+
+struct PGF_INTERNAL_DECL PgfInternalMarshaller : public PgfMarshaller {
+    virtual object match_lit(PgfUnmarshaller *u, PgfLiteral l);
+    virtual object match_expr(PgfUnmarshaller *u, PgfExpr e);
+    virtual object match_type(PgfUnmarshaller *u, PgfType ty);
 };
 
 typedef struct PgfBind {
@@ -209,6 +164,7 @@ class PGF_INTERNAL_DECL PgfExprParser {
     PgfText *inp;
     const char *token_pos, *pos;
     uint32_t ch;
+    PgfBind *bs;
 
     bool getc();
     void putc(uint32_t ch);
@@ -221,15 +177,17 @@ public:
     void token();
     bool lookahead(int ch);
 
-    PgfBind *parse_bind(PgfBind *next);
-    PgfBind *parse_binds(PgfBind *next);
+    bool parse_bind();
+    bool parse_binds();
+    void pop_binds(PgfBind *last);
 
     PgfExpr parse_arg();
     PgfExpr parse_term();
     PgfExpr parse_expr();
 
-    bool parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos);
+    bool parse_hypos(size_t *n_hypos, PgfTypeHypo **hypos, PgfBind **pbs);
     PgfType parse_type();
+    PgfTypeHypo *parse_context(size_t *p_n_hypos);
 
     bool eof();
 
@@ -240,12 +198,16 @@ class PGF_INTERNAL_DECL PgfExprProbEstimator : public PgfUnmarshaller {
     PgfPGF *pgf;
     PgfMarshaller *m;
     prob_t prob;
+    prob_t cat_prob;
+    prob_t cat_prob_total;
 
 public:
     PgfExprProbEstimator(PgfPGF *pgf, PgfMarshaller *marshaller) {
         this->pgf = pgf;
         this->m = marshaller;
-        this->prob = 0;
+        this->prob     = 0;
+        this->cat_prob = 0;
+        this->cat_prob_total = 0;
     }
 
     virtual PgfExpr eabs(PgfBindType bind_type, PgfText *name, PgfExpr body);
@@ -272,18 +234,15 @@ public:
  */
 
 PGF_INTERNAL_DECL
-void pgf_literal_free(PgfLiteral literal);
+void pgf_literal_release(PgfLiteral literal);
 
 PGF_INTERNAL_DECL
-void pgf_expr_free(PgfExpr expr);
+void pgf_expr_release(PgfExpr expr);
 
 PGF_INTERNAL_DECL
-void pgf_context_free(ref<PgfVector<PgfHypo>> hypos);
+void pgf_context_release(ref<Vector<PgfHypo>> hypos);
 
 PGF_INTERNAL_DECL
-void pgf_type_free(ref<PgfDTyp> dtyp);
-
-PGF_INTERNAL_DECL
-void pgf_patt_free(PgfPatt patt);
+void pgf_type_release(ref<PgfDTyp> dtyp);
 
 #endif /* EXPR_H_ */

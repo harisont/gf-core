@@ -12,6 +12,12 @@ typedef struct {
     PgfRevision revision;
 } PGFObject;
 
+typedef struct {
+    PyObject_HEAD
+    PGFObject* grammar;
+    PgfConcrRevision concr;
+} ConcrObject;
+
 extern PyObject *PGFError;
 PgfExnType handleError(PgfExn err);
 
@@ -31,5 +37,9 @@ void FreePgfPrintContext(PgfPrintContext *ctxt);
 
 extern PgfUnmarshaller unmarshaller;
 extern PgfMarshaller marshaller;
+
+#if defined(_MSC_VER)
+#define alloca _alloca
+#endif
 
 #endif // PYPGF_FFI_H_

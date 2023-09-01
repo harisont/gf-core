@@ -1,0 +1,240 @@
+name: gf
+version: 4.0.0
+
+cabal-version: 1.22
+build-type: Simple
+license: OtherLicense
+license-file: LICENSE
+category: Natural Language Processing, Compiler
+synopsis: Grammatical Framework
+description: GF, Grammatical Framework, is a programming language for multilingual grammar applications
+maintainer: John J. Camilleri <john@digitalgrammars.com>
+homepage: https://www.grammaticalframework.org/
+bug-reports: https://github.com/GrammaticalFramework/gf-core/issues
+tested-with: GHC==7.10.3, GHC==8.0.2, GHC==8.10.4, GHC==9.0.2
+
+data-files:
+  www/*.html
+  www/*.css
+  www/Logos/gf0.png
+  www/P/*.png
+  www/gfse/*.html
+  www/gfse/*.css
+  www/gfse/*.js
+  www/gfse/P/*.png
+  www/gfse/P/*.jpg
+  www/js/*.js
+  www/minibar/*.html
+  www/minibar/*.css
+  www/minibar/*.js
+  www/minibar/*.png
+  www/syntax-editor/*.html
+  www/syntax-editor/*.css
+  www/syntax-editor/*.js
+  www/TransQuiz/*.html
+  www/TransQuiz/*.css
+  www/TransQuiz/*.js
+  www/TransQuiz/*.png
+  www/translator/*.html
+  www/translator/*.css
+  www/translator/*.js
+
+source-repository head
+  type: git
+  location: https://github.com/GrammaticalFramework/gf-core.git
+
+flag interrupt
+  Description: Enable Ctrl+Break in the shell
+  Default: True
+
+flag server
+  Description: Include --server mode
+  Default: True
+
+flag network-uri
+   description: Get Network.URI from the network-uri package
+   default: True
+
+executable gf
+  main-is: gf-main.hs
+  default-language:    Haskell2010
+  build-depends: pgf2 >= 4.0.0,
+                 base >= 4.6 && <5,
+                 array,
+                 containers,
+                 bytestring,
+                 utf8-string,
+                 random,
+                 pretty,
+                 mtl,
+                 ghc-prim,
+                 filepath, directory>=1.2, time,
+                 process, haskeline, parallel>=3, json
+  ghc-options: -threaded
+  other-modules:
+    GF
+    GF.Support
+    GF.Text.Pretty
+    GF.Text.Lexing
+    GF.Grammar.Canonical
+
+    GF.Main GF.Compiler GF.Interactive
+
+    GF.Compile GF.CompileInParallel GF.CompileOne  GF.Compile.GetGrammar
+    GF.Grammar
+
+    GF.Data.Operations GF.Infra.Option GF.Infra.UseIO
+
+    GF.Command.Abstract
+    GF.Command.CommandInfo
+    GF.Command.Commands
+    GF.Command.CommonCommands
+    GF.Command.SourceCommands
+    GF.Command.Help
+    GF.Command.Importing
+    GF.Command.Interpreter
+    GF.Command.Messages
+    GF.Command.Parse
+    GF.Command.TreeOperations
+    GF.Compile.CFGtoPGF
+    GF.Compile.CheckGrammar
+    GF.Compile.Compute.Concrete
+    GF.Compile.ExampleBased
+    GF.Compile.Export
+    GF.Compile.GenerateBC
+    GF.Compile.GeneratePMCFG
+    GF.Compile.GrammarToPGF
+    GF.Compile.Multi
+    GF.Compile.OptimizePGF
+    GF.Compile.PGFtoHaskell
+    GF.Compile.PGFtoJava
+    GF.Haskell
+    GF.Compile.ConcreteToHaskell
+    GF.Compile.GrammarToCanonical
+    GF.Grammar.CanonicalJSON
+    GF.Compile.ReadFiles
+    GF.Compile.Rename
+    GF.Compile.SubExOpt
+    GF.Compile.Tags
+    GF.Compile.ToAPI
+    GF.Compile.TypeCheck.Abstract
+    GF.Compile.TypeCheck.Concrete
+    GF.Compile.TypeCheck.ConcreteNew
+    GF.Compile.TypeCheck.Primitives
+    GF.Compile.TypeCheck.TC
+    GF.Compile.Update
+    GF.Data.BacktrackM
+    GF.Data.ErrM
+    GF.Data.Graph
+    GF.Data.Graphviz
+    GF.Data.Relation
+    GF.Data.Str
+    GF.Data.Utilities
+    GF.Data.XML
+    GF.Grammar.Analyse
+    GF.Grammar.Binary
+    GF.Grammar.CFG
+    GF.Grammar.EBNF
+    GF.Grammar.BNFC
+    GF.Grammar.Grammar
+    GF.Grammar.Lexer
+    GF.Grammar.Lockfield
+    GF.Grammar.Lookup
+    GF.Grammar.Macros
+    GF.Grammar.Parser
+    GF.Grammar.PatternMatch
+    GF.Grammar.Predef
+    GF.Grammar.Printer
+    GF.Grammar.ShowTerm
+    GF.Grammar.Unify
+    GF.Grammar.Values
+    GF.Infra.BuildInfo
+    GF.Infra.CheckM
+    GF.Infra.Concurrency
+    GF.Infra.Dependencies
+    GF.Infra.GetOpt
+    GF.Infra.Ident
+    GF.Infra.Location
+    GF.Infra.SIO
+    GF.JavaScript.AbsJS
+    GF.JavaScript.PrintJS
+    GF.Quiz
+    GF.Speech.CFGToFA
+    GF.Speech.FiniteState
+    GF.Speech.GSL
+    GF.Speech.JSGF
+    GF.Speech.PGFToCFG
+    GF.Speech.PrRegExp
+    GF.Speech.RegExp
+    GF.Speech.SISR
+    GF.Speech.SLF
+    GF.Speech.SRG
+    GF.Speech.SRGS_ABNF
+    GF.Speech.SRGS_XML
+    GF.Speech.VoiceXML
+    GF.System.Catch
+    GF.System.Concurrency
+    GF.System.Console
+    GF.System.Directory
+    GF.System.Process
+    GF.System.Signal
+    GF.System.NoSignal
+    GF.Text.Clitics
+    GF.Text.Coding
+    GF.Text.Transliterations
+    Paths_gf
+
+    -- not really part of GF but I have changed the original binary library
+    -- and we have to keep the copy for now.
+    Data.Binary
+    Data.Binary.Put
+    Data.Binary.Get
+    Data.Binary.Builder
+    Data.Binary.IEEE754
+
+  if os(windows)
+    build-depends:
+      Win32 >= 2.3.1.1 && < 2.7
+  else
+    build-depends:
+      terminfo >=0.4.0 && < 0.5,
+      unix >= 2.7.2 && < 2.8
+
+  if flag(server)
+    build-depends:
+      pgf-service,
+      http-slim,
+      network>=2.3 && <3.2
+    if flag(network-uri)
+      build-depends:
+        network-uri >= 2.6.1.0 && < 2.7,
+        network>=2.6 && <3.2
+    else
+      build-depends:
+        network >= 2.5 && <3.2
+
+    cpp-options: -DSERVER_MODE
+    other-modules:
+      GF.Server
+      GF.Server.SimpleEditor.Convert
+      GF.Server.SimpleEditor.JSON
+      GF.Server.SimpleEditor.Syntax
+
+  if flag(interrupt)
+    cpp-options: -DUSE_INTERRUPT
+    other-modules: GF.System.UseSignal
+  else
+    other-modules: GF.System.NoSignal
+
+test-suite gf-tests
+  type: exitcode-stdio-1.0
+  main-is: run.hs
+  hs-source-dirs: testsuite
+  build-depends:
+    base >= 4.9.1 && < 4.16,
+    Cabal >= 1.8,
+    directory >= 1.3.0 && < 1.4,
+    filepath >= 1.4.1 && < 1.5,
+    process >= 1.4.3 && < 1.7
+  build-tool-depends: gf:gf
+  default-language: Haskell2010

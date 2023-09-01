@@ -1,12 +1,12 @@
 module GF.Command.Importing (importGrammar, importSource) where
 
 import PGF2
-import PGF2.Internal(unionPGF)
+import PGF2.Transactions
 
 import GF.Compile
 import GF.Compile.Multi (readMulti)
 import GF.Compile.GetGrammar (getBNFCRules, getEBNFRules)
-import GF.Grammar (SourceGrammar) -- for cc command
+import GF.Grammar (ModuleName,SourceGrammar) -- for cc command
 import GF.Grammar.BNFC
 import GF.Grammar.EBNF
 import GF.Grammar.CFG
@@ -16,42 +16,71 @@ import GF.Infra.Option
 import GF.Data.ErrM
 
 import System.FilePath
+import System.Directory
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Control.Monad(foldM)
+import Control.Exception(catch,throwIO)
 
 -- import a grammar in an environment where it extends an existing grammar
-importGrammar :: Maybe PGF -> Options -> [FilePath] -> IO (Maybe PGF)
-importGrammar pgf0 _    []    = return pgf0
-importGrammar pgf0 opts files =
-  case takeExtensions (last files) of
-    ".cf"   -> fmap Just $ importCF opts files getBNFCRules bnfc2cf
-    ".ebnf" -> fmap Just $ importCF opts files getEBNFRules ebnf2cf
-    ".gfm"  -> do
-      ascss <- mapM readMulti files
-      let cs = concatMap snd ascss
-      importGrammar pgf0 opts cs
-    s | elem s [".gf",".gfo"] -> do
-      res <- tryIOE $ compileToPGF opts files
-      case res of
-        Ok pgf2 -> ioUnionPGF pgf0 pgf2
-        Bad msg -> do putStrLn ('\n':'\n':msg)
-                      return pgf0
-    ".pgf" -> do
-      mapM readPGF files >>= foldM ioUnionPGF pgf0
-    ".ngf" -> do
-      mapM readNGF files >>= foldM ioUnionPGF pgf0
-    ext -> die $ "Unknown filename extension: " ++ show ext
+importGrammar :: (FilePath -> IO PGF) -> Maybe PGF -> Options -> [FilePath] -> IO (Maybe PGF)
+importGrammar readNGF pgf0 opts  _
+  | Just name <- flag optBlank opts = do
+        mb_ngf_file <- if snd (flag optLinkTargets opts)
+                         then do let fname = name <.> ".ngf"
+                                 putStr ("(Boot image "++fname++") ")
+                                 return (Just fname)
+                         else do return Nothing
+        pgf <- newNGF name mb_ngf_file 0
+        return (Just pgf)
+importGrammar readNGF pgf0 _    [] = return pgf0
+importGrammar readNGF pgf0 opts fs
+  | all (extensionIs ".cf")   fs = fmap Just $ importCF opts fs getBNFCRules bnfc2cf
+  | all (extensionIs ".ebnf") fs = fmap Just $ importCF opts fs getEBNFRules ebnf2cf
+  | all (extensionIs ".gfm")  fs = do
+        ascss <- mapM readMulti fs
+        let cs = concatMap snd ascss
+        importGrammar readNGF pgf0 opts cs
+  | all (\f -> extensionIs ".gf" f || extensionIs ".gfo" f) fs = do
+        res <- tryIOE $ compileToPGF opts pgf0 fs
+        case res of
+          Ok pgf  -> return (Just pgf)
+          Bad msg -> do putStrLn ('\n':'\n':msg)
+                        return pgf0
+  | all (extensionIs ".pgf") fs = foldM (importPGF opts) pgf0 fs
+  | all (extensionIs ".ngf") fs = do
+        case fs of
+          [f] -> fmap Just $ readNGF f
+          _   -> die $ "Only one .ngf file could be loaded at a time"
+  | otherwise =  die $ "Don't know what to do with these input files: " ++ unwords fs
+  where
+    extensionIs ext = (== ext) .  takeExtension
 
-ioUnionPGF :: Maybe PGF -> PGF -> IO (Maybe PGF)
-ioUnionPGF Nothing    two = return (Just two)
-ioUnionPGF (Just one) two =
-  case unionPGF one two of
-    Nothing         -> putStrLn "Abstract changed, previous concretes discarded." >> return (Just two)
-    Just pgf        -> return (Just pgf)
+importPGF :: Options -> Maybe PGF -> FilePath -> IO (Maybe PGF)
+importPGF opts Nothing    f
+  | snd (flag optLinkTargets opts) = do let f' = replaceExtension f ".ngf"
+                                        exists <- doesFileExist f'
+                                        if exists
+                                          then removeFile f'
+                                          else return ()
+                                        putStr ("(Boot image "++f'++") ")
+                                        mb_probs <- case flag optProbsFile opts of
+                                                      Nothing   -> return Nothing
+                                                      Just file -> fmap Just (readProbabilitiesFromFile file)
+                                        fmap Just (bootNGFWithProbs f mb_probs f')
+  | otherwise                      = do mb_probs <- case flag optProbsFile opts of
+                                                      Nothing   -> return Nothing
+                                                      Just file -> fmap Just (readProbabilitiesFromFile file)
+                                        fmap Just (readPGFWithProbs f mb_probs)
+importPGF opts (Just pgf) f        = fmap Just (modifyPGF pgf (mergePGF f) `catch`
+                                                (\e@(PGFError loc msg) ->
+                                                      if msg == "The abstract syntax names doesn't match"
+                                                        then do putStrLn (msg++", previous concretes discarded.")
+                                                                readPGF f
+                                                        else throwIO e))
 
-importSource :: Options -> [FilePath] -> IO SourceGrammar
-importSource opts files = fmap (snd.snd) (batchCompile opts files)
+importSource :: Options -> [FilePath] -> IO (ModuleName,SourceGrammar)
+importSource opts files = fmap snd (batchCompile opts files)
 
 -- for different cf formats
 importCF opts files get convert = impCF

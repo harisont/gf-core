@@ -4,11 +4,12 @@
 -- | preparation for PMCFG generation.
 module GF.Compile.Compute.Concrete
            ( normalForm
-           , Value(..), Thunk, ThunkState(..), Env
+           , Value(..), Thunk, ThunkState(..), Env, showValue
            , EvalM, runEvalM, evalError
            , eval, apply, force, value2term, patternMatch
-           , newMeta,getMeta,setMeta
-           , newThunk,newEvaluatedThunk
+           , newThunk, newEvaluatedThunk
+           , newResiduation, newNarrowing, getVariables
+           , getRef
            , getResDef, getInfo, getAllParamValues
            ) where
 
@@ -19,9 +20,7 @@ import GF.Grammar.Lookup(lookupResDef,lookupOrigInfo,allParamValues)
 import GF.Grammar.Predef
 import GF.Grammar.Lockfield(lockLabel)
 import GF.Grammar.Printer
-import GF.Data.Str(Str,glueStr,str2strings,str,sstr,plusStr,strTok)
-import GF.Data.Operations(Err(..),err,errIn,maybeErr,mapPairsM)
-import GF.Data.Utilities(mapFst,mapSnd)
+import GF.Data.Operations(Err(..))
 import GF.Infra.CheckM
 import GF.Infra.Option
 import Data.STRef
@@ -30,7 +29,7 @@ import Data.List
 import Data.Char
 import Control.Monad
 import Control.Monad.ST
-import Control.Applicative
+import Control.Applicative hiding (Const)
 import qualified Control.Monad.Fail as Fail
 import qualified Data.Map as Map
 import GF.Text.Pretty
@@ -40,7 +39,7 @@ import PGF2.Transactions(LIndex)
 
 normalForm :: Grammar -> Term -> Check Term
 normalForm gr t =
-  fmap mkFV (runEvalM gr (eval [] t [] >>= value2term 0))
+  fmap mkFV (runEvalM gr (eval [] t [] >>= value2term []))
   where
     mkFV [t] = t
     mkFV ts  = FV ts
@@ -49,7 +48,8 @@ normalForm gr t =
 data ThunkState s
   = Unevaluated (Env s) Term
   | Evaluated (Value s)
-  | Unbound (Maybe Type) {-# UNPACK #-} !MetaId
+  | Residuation {-# UNPACK #-} !MetaId
+  | Narrowing   {-# UNPACK #-} !MetaId Type
 
 type Thunk s = STRef s (ThunkState s)
 type Env s = [(Ident,Thunk s)]
@@ -57,61 +57,92 @@ type Env s = [(Ident,Thunk s)]
 data Value s
   = VApp QIdent [Thunk s]
   | VMeta (Thunk s) (Env s) [Thunk s]
-  | VSusp (Thunk s) (Env s) [Thunk s] (Thunk s -> EvalM s (Value s))
+  | VSusp (Thunk s) (Env s) (Value s -> EvalM s (Value s)) [Thunk s]
   | VGen  {-# UNPACK #-} !Int [Thunk s]
   | VClosure (Env s) Term
-  | VProd BindType Ident (Value s) (Env s) Term
+  | VProd BindType Ident (Value s) (Value s)
   | VRecType [(Label, Value s)]
   | VR [(Label, Thunk s)]
   | VP (Value s) Label [Thunk s]
   | VExtR (Value s) (Value s)
   | VTable (Value s) (Value s)
-  | VT TInfo (Env s) [Case]
-  | VV Type [Thunk s]
+  | VT (Value s) (Env s) [Case]
+  | VV (Value s) [Thunk s]
   | VS (Value s) (Thunk s) [Thunk s]
   | VSort Ident
   | VInt Integer
   | VFlt Double
   | VStr String
-  | VC [Value s]
+  | VEmpty
+  | VC (Value s) (Value s)
   | VGlue (Value s) (Value s)
   | VPatt Int (Maybe Int) Patt
   | VPattType (Value s)
   | VAlts (Value s) [(Value s, Value s)]
   | VStrs [Value s]
-    -- This last constructor is only generated internally
+    -- These last constructors are only generated internally
     -- in the PMCFG generator.
-  | VSymCat Int LIndex [(LIndex, Thunk s)]
+  | VSymCat Int LIndex [(LIndex, (Thunk s, Type))]
+  | VSymVar Int Int
 
+
+showValue (VApp q tnks) = "(VApp "++unwords (show q : map (const "_") tnks) ++ ")"
+showValue (VMeta _ _ _) = "VMeta"
+showValue (VSusp _ _ _ _) = "VSusp"
+showValue (VGen _ _) = "VGen"
+showValue (VClosure _ _) = "VClosure"
+showValue (VProd _ _ _ _) = "VProd"
+showValue (VRecType _) = "VRecType"
+showValue (VR lbls) = "(VR {"++unwords (map (\(lbl,_) -> show lbl) lbls)++"})"
+showValue (VP v l _) = "(VP "++showValue v++" "++show l++")"
+showValue (VExtR _ _) = "VExtR"
+showValue (VTable _ _) = "VTable"
+showValue (VT _ _ cs) = "(VT "++show cs++")"
+showValue (VV _ _) = "VV"
+showValue (VS v _ _) = "(VS "++showValue v++")"
+showValue (VSort _) = "VSort"
+showValue (VInt _) = "VInt"
+showValue (VFlt _) = "VFlt"
+showValue (VStr s) = "(VStr "++show s++")"
+showValue VEmpty = "VEmpty"
+showValue (VC _ _) = "VC"
+showValue (VGlue _ _) = "VGlue"
+showValue (VPatt _ _ _) = "VPatt"
+showValue (VPattType _) = "VPattType"
+showValue (VAlts _ _) = "VAlts"
+showValue (VStrs _) = "VStrs"
+showValue (VSymCat _ _ _) = "VSymCat"
 
 eval env (Vr x)         vs  = case lookup x env of
-                                Just tnk -> force tnk vs
+                                Just tnk -> do v <- force tnk
+                                               apply v vs
                                 Nothing  -> evalError ("Variable" <+> pp x <+> "is not in scope")
 eval env (Sort s)       []  = return (VSort s)
 eval env (EInt n)       []  = return (VInt n)
 eval env (EFloat d)     []  = return (VFlt d)
 eval env (K t)          []  = return (VStr t)
-eval env Empty          []  = return (VC [])
+eval env Empty          []  = return VEmpty
 eval env (App t1 t2)    vs  = do tnk <- newThunk env t2
                                  eval env t1 (tnk : vs)
 eval env (Abs b x t)    []  = return (VClosure env (Abs b x t))
 eval env (Abs b x t) (v:vs) = eval ((x,v):env) t vs
-eval env (Meta i)       vs  = do tnk <- newMeta Nothing i
+eval env (Meta i)       vs  = do tnk <- newResiduation i
                                  return (VMeta tnk env vs)
 eval env (ImplArg t)    []  = eval env t []
 eval env (Prod b x t1 t2)[] = do v1 <- eval env t1 []
-                                 return (VProd b x v1 env t2)
+                                 return (VProd b x v1 (VClosure env t2))
 eval env (Typed t ty)   vs  = eval env t vs
 eval env (RecType lbls) []  = do lbls <- mapM (\(lbl,ty) -> fmap ((,) lbl) (eval env ty [])) lbls
-                                 return (VRecType lbls)
+                                 return (VRecType (sortRec lbls))
 eval env (R as)         []  = do as <- mapM (\(lbl,(_,t)) -> fmap ((,) lbl) (newThunk env t)) as
                                  return (VR as)
 eval env (P t lbl)      vs  = do v <- eval env t []
                                  case v of
                                    VR as -> case lookup lbl as of
                                               Nothing  -> evalError ("Missing value for label" <+> pp lbl $$
-                                                                     "in record" <+> pp t)
-                                              Just tnk -> force tnk vs
+                                                                     "in" <+> pp (P t lbl))
+                                              Just tnk -> do v <- force tnk
+                                                             apply v vs
                                    v     -> return (VP v lbl vs)
 eval env (ExtR t1 t2)   []  = do v1 <- eval env t1 []
                                  v2 <- eval env t2 []
@@ -122,42 +153,61 @@ eval env (ExtR t1 t2)   []  = do v1 <- eval env t1 []
 eval env (Table t1 t2)  []  = do v1 <- eval env t1 []
                                  v2 <- eval env t2 []
                                  return (VTable v1 v2)
-eval env (T i cs)       []  = return (VT i env cs)
-eval env (V ty ts)      []  = do tnks <- mapM (newThunk env) ts
-                                 return (VV ty tnks)
-eval env t@(S t1 t2)    vs  = do v1   <- eval env t1 []
+eval env (T (TTyped ty) cs)[]=do vty <- eval env ty []
+                                 return (VT vty env cs)
+eval env (T (TWild ty) cs) []=do vty <- eval env ty []
+                                 return (VT vty env cs)
+eval env (V ty ts)      []  = do vty <- eval env ty []
+                                 tnks <- mapM (newThunk env) ts
+                                 return (VV vty tnks)
+eval env (S t1 t2)      vs  = do v1   <- eval env t1 []
                                  tnk2 <- newThunk env t2
                                  let v0 = VS v1 tnk2 vs
                                  case v1 of
                                    VT _  env cs -> patternMatch v0 (map (\(p,t) -> (env,[p],tnk2:vs,t)) cs)
-                                   VV ty tnks   -> do t2 <- force tnk2 [] >>= value2term (length env)
-                                                      ts <- getAllParamValues ty
-                                                      case lookup t2 (zip ts tnks) of
-                                                        Just tnk -> force tnk vs
-                                                        Nothing  -> return v0
-                                   v1      -> return v0
+                                   VV vty tnks  -> do ty <- value2term (map fst env) vty
+                                                      vtableSelect v0 ty tnks tnk2 vs
+                                   v1           -> return v0
 eval env (Let (x,(_,t1)) t2) vs = do tnk <- newThunk env t1
                                      eval ((x,tnk):env) t2 vs
 eval env (Q q@(m,id))   vs
-  | m == cPredef            = do vs' <- mapM (flip force []) vs
+  | m == cPredef            = do vs' <- mapM force vs
                                  mb_res <- evalPredef id vs'
                                  case mb_res of
-                                   Just res -> return res
-                                   Nothing  -> return (VApp q vs)
+                                   Const res -> return res
+                                   RunTime   -> return (VApp q vs)
+                                   NonExist  -> return (VApp (cPredef,cNonExist) [])
   | otherwise               = do t <- getResDef q
                                  eval env t vs
 eval env (QC q)         vs  = return (VApp q vs)
 eval env (C t1 t2)      []  = do v1 <- eval env t1 []
                                  v2 <- eval env t2 []
                                  case (v1,v2) of
-                                   (VC vs1,VC vs2) -> return (VC (vs1++vs2))
-                                   (VC vs1,v2    ) -> return (VC (vs1++[v2]))
-                                   (v1,    VC vs2) -> return (VC ([v1]++vs2))
-                                   (v1,    v2    ) -> return (VC [v1,v2])
+                                   (VEmpty,VEmpty) -> return VEmpty
+                                   (v1,    VEmpty) -> return v1
+                                   (VEmpty,v2    ) -> return v2
+                                   _               -> return (VC v1 v2)
 eval env t@(Glue t1 t2) []  = do v1 <- eval env t1 []
                                  v2 <- eval env t2 []
-                                 case liftM2 (++) (value2string v1) (value2string v2) of
-                                   Just s  -> return (string2value s)
+                                 let glue v =
+                                      case value2string' v False [] [] of
+                                        Const (b,ws,qs) -> let b' = case v1 of
+                                                                      VEmpty -> b
+                                                                      _      -> True
+                                                           in case value2string' v1 b' ws qs of
+                                                                Const (b,ws,qs) -> Just (bind b ws (foldl (\v q->VC v (VApp q [])) (string2value' ws) qs))
+                                                                NonExist        -> Just (VApp (cPredef,cNonExist) [])
+                                                                RunTime         -> Nothing
+                                        NonExist     -> Just (VApp (cPredef,cNonExist) [])
+                                        RunTime      -> Nothing
+                                     bind True  (_:_) v = VC (VApp (cPredef,cBIND) []) v
+                                     bind _     _     v = v
+                                 case (case v2 of
+                                        (VAlts d vas) -> do d <- glue d
+                                                            vas <- mapM (\(v,ss) -> glue v >>= \v -> return (v,ss)) vas
+                                                            return (VAlts d vas)
+                                        _             -> do glue v2) of
+                                   Just v  -> return v
                                    Nothing -> return (VGlue v1 v2)
 eval env (EPatt min max p) [] = return (VPatt min max p)
 eval env (EPattType t)  []  = do v <- eval env t []
@@ -183,59 +233,60 @@ eval env (Alts d as)    []  = do vd <- eval env d []
                                  return (VAlts vd vas)
 eval env (Strs ts)      []  = do vs <- mapM (\t -> eval env t []) ts
                                  return (VStrs vs)
-eval env (TSymCat d r rs) []= do rs <- forM rs $ \(i,pv) ->
+eval env (TSymCat d r rs) []= do rs <- forM rs $ \(i,(pv,ty)) ->
                                          case lookup pv env of
-                                           Just tnk -> return (i,tnk)
+                                           Just tnk -> return (i,(tnk,ty))
                                            Nothing  -> evalError ("Variable" <+> pp pv <+> "is not in scope")
                                  return (VSymCat d r rs)
+eval env (TSymVar d r)  []  = do return (VSymVar d r)
 eval env t              vs  = evalError ("Cannot reduce term" <+> pp t)
 
-apply (VMeta m env vs0)             vs  = do st <- getMeta m
-                                             case st of
-                                               Evaluated v -> apply v vs
-                                               Unbound _ _ -> return (VMeta m env (vs0++vs))
+apply (VMeta m env vs0)             vs  = return (VMeta m env   (vs0++vs))
+apply (VSusp m env k vs0)           vs  = return (VSusp m env k (vs0++vs))
 apply (VApp f  vs0)                 vs  = return (VApp f (vs0++vs))
 apply (VGen i  vs0)                 vs  = return (VGen i (vs0++vs))
 apply (VClosure env (Abs b x t)) (v:vs) = eval ((x,v):env) t vs
 apply v                             []  = return v
 
 evalPredef id [v]
-  | id == cLength = return (fmap VInt (liftM genericLength (value2string v)))
+  | id == cLength = case value2string v of
+                      Const s -> return (Const (VInt (genericLength s)))
+                      _       -> return RunTime
 evalPredef id [v1,v2]
-  | id == cTake   = return (fmap string2value (liftM2 genericTake (value2int v1) (value2string v2)))
+  | id == cTake   = return (fmap string2value (liftA2 genericTake (value2int v1) (value2string v2)))
 evalPredef id [v1,v2]
-  | id == cDrop   = return (fmap string2value (liftM2 genericDrop (value2int v1) (value2string v2)))
+  | id == cDrop   = return (fmap string2value (liftA2 genericDrop (value2int v1) (value2string v2)))
 evalPredef id [v1,v2]
-  | id == cTk     = return (fmap string2value (liftM2 genericTk (value2int v1) (value2string v2)))
+  | id == cTk     = return (fmap string2value (liftA2 genericTk (value2int v1) (value2string v2)))
   where
-    genericTk n = reverse . genericTake n . reverse
+    genericTk n = reverse . genericDrop n . reverse
 evalPredef id [v1,v2]
-  | id == cDp     = return (fmap string2value (liftM2 genericDp (value2int v1) (value2string v2)))
+  | id == cDp     = return (fmap string2value (liftA2 genericDp (value2int v1) (value2string v2)))
   where
-    genericDp n = reverse . genericDrop n . reverse
+    genericDp n = reverse . genericTake n . reverse
 evalPredef id [v]
-  | id == cIsUpper= return (fmap toPBool (liftM (all isUpper) (value2string v)))
+  | id == cIsUpper= return (fmap toPBool (liftA (all isUpper) (value2string v)))
 evalPredef id [v]
-  | id == cToUpper= return (fmap string2value (liftM (map toUpper) (value2string v)))
+  | id == cToUpper= return (fmap string2value (liftA (map toUpper) (value2string v)))
 evalPredef id [v]
-  | id == cToLower= return (fmap string2value (liftM (map toLower) (value2string v)))
+  | id == cToLower= return (fmap string2value (liftA (map toLower) (value2string v)))
 evalPredef id [v1,v2]
-  | id == cEqStr  = return (fmap toPBool (liftM2 (==) (value2string v1) (value2string v2)))
+  | id == cEqStr  = return (fmap toPBool (liftA2 (==) (value2string v1) (value2string v2)))
 evalPredef id [v1,v2]
-  | id == cOccur  = return (fmap toPBool (liftM2 occur (value2string v1) (value2string v2)))
+  | id == cOccur  = return (fmap toPBool (liftA2 occur (value2string v1) (value2string v2)))
 evalPredef id [v1,v2]
-  | id == cOccurs  = return (fmap toPBool (liftM2 occurs (value2string v1) (value2string v2)))
+  | id == cOccurs  = return (fmap toPBool (liftA2 occurs (value2string v1) (value2string v2)))
 evalPredef id [v1,v2]
-  | id == cEqInt  = return (fmap toPBool (liftM2 (==) (value2int v1) (value2int v2)))
+  | id == cEqInt  = return (fmap toPBool (liftA2 (==) (value2int v1) (value2int v2)))
 evalPredef id [v1,v2]
-  | id == cLessInt= return (fmap toPBool (liftM2 (<) (value2int v1) (value2int v2)))
+  | id == cLessInt= return (fmap toPBool (liftA2 (<) (value2int v1) (value2int v2)))
 evalPredef id [v1,v2]
-  | id == cPlus   = return (fmap VInt (liftM2 (+) (value2int v1) (value2int v2)))
+  | id == cPlus   = return (fmap VInt (liftA2 (+) (value2int v1) (value2int v2)))
 evalPredef id [v]
   | id == cError  = case value2string v of
-                      Just msg -> fail msg
-                      Nothing  -> return Nothing
-evalPredef id vs  = return Nothing
+                      Const msg -> fail msg
+                      _         -> fail "Indescribable error appeared"
+evalPredef id vs  = return RunTime
 
 toPBool True  = VApp (cPredef,cPTrue)  []
 toPBool False = VApp (cPredef,cPFalse) []
@@ -257,15 +308,16 @@ update lbl v (a@(lbl',_):as)
   | otherwise                = a : update lbl v as
 
 
-patternMatch v0 []                      = fail "No matching pattern found"
+patternMatch v0 []                      = return v0
 patternMatch v0 ((env0,ps,args0,t):eqs) = match env0 ps eqs args0
   where
     match env []              eqs      args  = eval env t args
     match env (PT ty p   :ps) eqs      args  = match env (p:ps) eqs args
     match env (PAlt p1 p2:ps) eqs      args  = match env (p1:ps) ((env,p2:ps,args,t):eqs) args
     match env (PM q      :ps) eqs      args  = do t <- getResDef q
-                                                  case t of
-                                                    EPatt _ _ p -> match env (p:ps) eqs args
+                                                  v <- eval [] t []
+                                                  case v of
+                                                    VPatt _ _ p -> match env (p:ps) eqs args
                                                     _ -> evalError $ hang "Expected pattern macro:" 4
                                                                           (pp t)
     match env (PV v      :ps) eqs (arg:args) = match ((v,arg):env) ps eqs args
@@ -273,33 +325,38 @@ patternMatch v0 ((env0,ps,args0,t):eqs) = match env0 ps eqs args0
     match env (PW        :ps) eqs (arg:args) = match env ps eqs args
     match env (PTilde _  :ps) eqs (arg:args) = match env ps eqs args
     match env (p         :ps) eqs (arg:args) = do
-      v <- force arg []
+      v <- force arg
+      match' env p ps eqs arg v args
+
+    match' env p ps eqs arg v args = do
       case (p,v) of
-        (p,       VMeta i envi vs  ) -> return (VSusp i envi vs (\tnk -> match env (p:ps) eqs (tnk:args)))
+        (p,       VMeta i envi   vs) -> susp i envi (\v -> apply v vs >>= \v -> match' env p ps eqs arg v args)
         (p,       VGen  i vs       ) -> return v0
-        (p,       VSusp i envi vs k) -> return (VSusp i envi vs (\tnk -> match env (p:ps) eqs (tnk:args)))
+        (p,       VSusp i envi k vs) -> susp i envi (\v -> k v >>= \v -> apply v vs >>= \v -> match' env p ps eqs arg v args)
         (PP q qs, VApp r tnks)
           | q == r        -> match env (qs++ps) eqs (tnks++args)
-        (PR pas, VR as)   -> matchRec env pas as ps eqs args
+        (PR pas, VR as)   -> matchRec env (reverse pas) as ps eqs args
         (PString s1, VStr s2)
           | s1 == s2      -> match env ps eqs args
-        (PString s1, VC [])
+        (PString s1, VEmpty)
           | null s1       -> match env ps eqs args
         (PSeq min1 max1 p1 min2 max2 p2,v)
                           -> case value2string v of
-                               Just s  -> do let n  = length s
+                               Const s -> do let n  = length s
                                                  lo = min1 `max` (n-fromMaybe n max2)
                                                  hi = (n-min2) `min` fromMaybe n max1
                                                  (ds,cs) = splitAt lo s
                                              eqs <- matchStr env (p1:p2:ps) eqs (hi-lo) (reverse ds) cs args
                                              patternMatch v0 eqs
-                               Nothing -> return v0
+                               RunTime -> return v0
+                               NonExist-> patternMatch v0 eqs
         (PRep minp maxp p, v)
                           -> case value2string v of
-                               Just s  -> do let n = length s `div` (max minp 1)
+                               Const s -> do let n = length s `div` (max minp 1)
                                              eqs <- matchRep env n minp maxp p minp maxp p ps ((env,PString []:ps,(arg:args),t) : eqs) (arg:args)
                                              patternMatch v0 eqs
-                               Nothing -> return v0
+                               RunTime -> return v0
+                               NonExist-> patternMatch v0 eqs
         (PChar, VStr [_]) -> match env ps eqs args
         (PChars cs, VStr [c])
           | elem c cs     -> match env ps eqs args
@@ -334,96 +391,285 @@ patternMatch v0 ((env0,ps,args0,t):eqs) = match env0 ps eqs args0
     matchRep env n minp maxp p minq maxq q ps eqs args = do
       matchRep env (n-1) minp maxp p (minp+minq) (liftM2 (+) maxp maxq) (PSeq minp maxp p minq maxq q) ps ((env,q:ps,args,t) : eqs) args
 
-value2term i (VApp q tnks) =
-  foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (QC q) tnks
-value2term i (VMeta m env tnks) = do
+
+vtableSelect v0 ty tnks tnk2 vs = do
+  v2 <- force tnk2
+  (i,_) <- value2index v2 ty
+  v <- force (tnks !! i)
+  apply v vs
+  where
+    value2index (VR as) (RecType lbls) = compute lbls
+      where
+        compute []              = return (0,1)
+        compute ((lbl,ty):lbls) = do
+          case lookup lbl as of
+            Just tnk -> do v <- force tnk
+                           (r, cnt ) <- value2index v ty
+                           (r',cnt') <- compute lbls
+                           return (r*cnt'+r',cnt*cnt')
+            Nothing  -> evalError ("Missing value for label" <+> pp lbl $$
+                                   "among" <+> hsep (punctuate (pp ',') (map fst as)))
+    value2index (VApp q tnks) ty = do
+      (r ,ctxt,cnt ) <- getIdxCnt q
+      (r',     cnt') <- compute ctxt tnks
+      return (r+r',cnt)
+      where
+        getIdxCnt q = do
+          (_,ResValue (L _ ty) idx) <- getInfo q
+          let (ctxt,QC p) = typeFormCnc ty
+          (_,ResParam _ (Just (_,cnt))) <- getInfo p
+          return (idx,ctxt,cnt)
+
+        compute []              []         = return (0,1)
+        compute ((_,_,ty):ctxt) (tnk:tnks) = do
+          v <- force tnk
+          (r, cnt ) <- value2index v ty
+          (r',cnt') <- compute ctxt tnks
+          return (r*cnt'+r',cnt*cnt')
+    value2index (VInt n)          ty
+      | Just max <- isTypeInts ty    = return (fromIntegral n,fromIntegral max+1)
+    value2index (VMeta i envi vs) ty = do
+      v <- susp i envi (\v -> apply v vs)
+      value2index v ty
+    value2index (VSusp i envi k vs) ty = do
+      v <- susp i envi (\v -> k v >>= \v -> apply v vs)
+      value2index v ty
+    value2index v ty = do t <- value2term [] v
+                          evalError ("the parameter:" <+> ppTerm Unqualified 0 t $$
+                                     "cannot be evaluated at compile time.")
+
+
+susp i env ki = EvalM $ \gr k mt r -> do
+  s <- readSTRef i
+  case s of
+    Narrowing id (QC q) -> case lookupOrigInfo gr q of
+                             Ok (m,ResParam (Just (L _ ps)) _) -> bindParam gr k mt r s m ps
+                             Bad msg -> return (Fail (pp msg))
+    Narrowing id ty
+      | Just max <- isTypeInts ty
+                        -> bindInt gr k mt r s 0 max
+    Evaluated v         -> case ki v of
+                             EvalM f -> f gr k mt r
+    _                   -> k (VSusp i env ki []) mt r
+  where
+    bindParam gr k mt r s m []             = return (Success r)
+    bindParam gr k mt r s m ((p, ctxt):ps) = do
+      (mt',tnks) <- mkArgs mt ctxt
+      let v = VApp (m,p) tnks
+      writeSTRef i (Evaluated v)
+      res <- case ki v of
+               EvalM f -> f gr k mt' r
+      writeSTRef i s
+      case res of
+        Fail msg  -> return (Fail msg)
+        Success r -> bindParam gr k mt r s m ps
+
+    mkArgs mt []              = return (mt,[])
+    mkArgs mt ((_,_,ty):ctxt) = do
+      let i = case Map.maxViewWithKey mt of
+                Just ((i,_),_) -> i+1
+                _              -> 0
+      tnk  <- newSTRef (Narrowing i ty)
+      (mt,tnks) <- mkArgs (Map.insert i tnk mt) ctxt
+      return (mt,tnk:tnks)
+
+    bindInt gr k mt r s iv max
+      | iv <= max = do
+         let v = VInt iv
+         writeSTRef i (Evaluated v)
+         res <- case ki v of
+                  EvalM f -> f gr k mt r
+         writeSTRef i s
+         case res of
+           Fail msg  -> return (Fail msg)
+           Success r -> bindInt gr k mt r s (iv+1) max
+      | otherwise = return (Success r)
+
+
+value2term xs (VApp q tnks) =
+  foldM (\e1 tnk -> fmap (App e1) (force tnk >>= value2term xs)) (if fst q == cPredef then Q q else QC q) tnks
+value2term xs (VMeta m env tnks) = do
   res <- zonk m tnks
   case res of
-    Right i -> foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (Meta i) tnks
-    Left  v -> value2term i v
-value2term i (VSusp j env vs k) = do
-  tnk <- newEvaluatedThunk (VGen maxBound vs)
-  v <- k tnk
-  value2term i v
-value2term i (VGen j tnks) =
-  foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (Vr (identS ('v':show j))) tnks
-value2term i (VClosure env (Abs b x t)) = do
-  tnk <- newGen i
+    Right i -> foldM (\e1 tnk -> fmap (App e1) (force tnk >>= value2term xs)) (Meta i) tnks
+    Left  v -> value2term xs v
+value2term xs (VSusp j env k vs) = do
+  v <- k (VGen maxBound vs)
+  value2term xs v
+value2term xs (VGen j tnks) =
+  foldM (\e1 tnk -> fmap (App e1) (force tnk >>= value2term xs)) (Vr (reverse xs !! j)) tnks
+value2term xs (VClosure env (Abs b x t)) = do
+  tnk <- newEvaluatedThunk (VGen (length xs) [])
   v <- eval ((x,tnk):env) t []
-  t <- value2term (i+1) v
-  return (Abs b (identS ('v':show i)) t)
-value2term i (VProd b x v1 env t2)
-  | x == identW = do t1 <- value2term i v1
+  let x' = mkFreshVar xs x
+  t <- value2term (x':xs) v
+  return (Abs b x' t)
+value2term xs (VProd b x v1 (VClosure env t2))
+  | x == identW = do t1 <- value2term xs v1
                      v2 <- eval env t2 []
-                     t2 <- value2term i v2
+                     t2 <- value2term xs v2
                      return (Prod b x t1 t2)
-  | otherwise   = do t1 <- value2term i v1
-                     tnk <- newGen i
+  | otherwise   = do t1 <- value2term xs v1
+                     tnk <- newEvaluatedThunk (VGen (length xs) [])
                      v2 <- eval ((x,tnk):env) t2 []
-                     t2 <- value2term (i+1) v2
-                     return (Prod b (identS ('v':show i)) t1 t2)
-value2term i (VRecType lbls) = do
-  lbls <- mapM (\(lbl,v) -> fmap ((,) lbl) (value2term i v)) lbls
+                     t2 <- value2term (x:xs) v2
+                     return (Prod b (mkFreshVar xs x) t1 t2)
+value2term xs (VRecType lbls) = do
+  lbls <- mapM (\(lbl,v) -> fmap ((,) lbl) (value2term xs v)) lbls
   return (RecType lbls)
-value2term i (VR as) = do
-  as <- mapM (\(lbl,tnk) -> fmap (\t -> (lbl,(Nothing,t))) (force tnk [] >>= value2term i)) as
+value2term xs (VR as) = do
+  as <- mapM (\(lbl,tnk) -> fmap (\t -> (lbl,(Nothing,t))) (force tnk >>= value2term xs)) as
   return (R as)
-value2term i (VP v lbl tnks) = do
-  t <- value2term i v
-  foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (P t lbl) tnks
-value2term i (VExtR v1 v2) = do
-  t1 <- value2term i v1
-  t2 <- value2term i v2
+value2term xs (VP v lbl tnks) = do
+  t <- value2term xs v
+  foldM (\e1 tnk -> fmap (App e1) (force tnk >>= value2term xs)) (P t lbl) tnks
+value2term xs (VExtR v1 v2) = do
+  t1 <- value2term xs v1
+  t2 <- value2term xs v2
   return (ExtR t1 t2) 
-value2term i (VTable v1 v2) = do
-  t1 <- value2term i v1
-  t2 <- value2term i v2
+value2term xs (VTable v1 v2) = do
+  t1 <- value2term xs v1
+  t2 <- value2term xs v2
   return (Table t1 t2)
-value2term i (VT ti _ cs) = return (T ti cs)
-value2term i (VV ty tnks) = do ts <- mapM (\tnk -> force tnk [] >>= value2term i) tnks
-                               return (V ty ts)
-value2term i (VS v1 tnk2 tnks) = do t1 <- value2term i v1
-                                    t2 <- force tnk2 [] >>= value2term i
-                                    foldM (\e1 tnk -> fmap (App e1) (force tnk [] >>= value2term i)) (S t1 t2) tnks
-value2term i (VSort s) = return (Sort s)
-value2term i (VStr tok) = return (K tok)
-value2term i (VInt n) = return (EInt n)
-value2term i (VFlt n) = return (EFloat n)
-value2term i (VC vs) = do
-  ts <- mapM (value2term i) vs
-  case ts of
-    []     -> return Empty
-    (t:ts) -> return (foldl C t ts)
-value2term i (VGlue v1 v2) = do
-  t1 <- value2term i v1
-  t2 <- value2term i v2
+value2term xs (VT vty env cs)= do
+  ty <- value2term xs vty
+  cs <- forM cs $ \(p,t) -> do
+          (_,xs',env') <- pattVars (length xs,xs,env) p
+          v <- eval env' t []
+          t <- value2term xs' v
+          return (p,t)
+  return (T (TTyped ty) cs)
+value2term xs (VV vty tnks)= do ty <- value2term xs vty
+                                ts <- mapM (\tnk -> force tnk >>= value2term xs) tnks
+                                return (V ty ts)
+value2term xs (VS v1 tnk2 tnks) = do t1 <- value2term xs v1
+                                     t2 <- force tnk2 >>= value2term xs
+                                     foldM (\e1 tnk -> fmap (App e1) (force tnk >>= value2term xs)) (S t1 t2) tnks
+value2term xs (VSort s) = return (Sort s)
+value2term xs (VStr tok) = return (K tok)
+value2term xs (VInt n) = return (EInt n)
+value2term xs (VFlt n) = return (EFloat n)
+value2term xs VEmpty = return Empty
+value2term xs (VC v1 v2) = do
+  t1 <- value2term xs v1
+  t2 <- value2term xs v2
+  return (C t1 t2)
+value2term xs (VGlue v1 v2) = do
+  t1 <- value2term xs v1
+  t2 <- value2term xs v2
   return (Glue t1 t2)
-value2term i (VPatt min max p) = return (EPatt min max p)
-value2term i (VPattType v) = do t <- value2term i v
-                                return (EPattType t)
-value2term i (VAlts vd vas) = do
-  d <- value2term i vd
+value2term xs (VPatt min max p) = return (EPatt min max p)
+value2term xs (VPattType v) = do t <- value2term xs v
+                                 return (EPattType t)
+value2term xs (VAlts vd vas) = do
+  d <- value2term xs vd
   as <- forM vas $ \(vt,vs) -> do
-           t <- value2term i vt
-           s <- value2term i vs
+           t <- value2term xs vt
+           s <- value2term xs vs
            return (t,s)
   return (Alts d as)
-value2term i (VStrs vs) = do
-  ts <- mapM (value2term i) vs
+value2term xs (VStrs vs) = do
+  ts <- mapM (value2term xs) vs
   return (Strs ts)
 
-value2string (VStr s) = Just s
-value2string (VC vs)  = fmap unwords (mapM value2string vs)
-value2string _        = Nothing
+pattVars st (PP _ ps)    = foldM pattVars st ps
+pattVars st (PV x)       = case st of
+                             (i,xs,env) -> do tnk <- newEvaluatedThunk (VGen i [])
+                                              return (i+1,x:xs,(x,tnk):env)
+pattVars st (PR as)      = foldM (\st (_,p) -> pattVars st p) st as
+pattVars st (PT ty p)    = pattVars st p
+pattVars st (PAs x p)    = do st <- case st of
+                                      (i,xs,env) -> do tnk <- newEvaluatedThunk (VGen i [])
+                                                       return (i+1,x:xs,(x,tnk):env)
+                              pattVars st p
+pattVars st (PImplArg p) = pattVars st p
+pattVars st (PSeq _ _ p1 _ _ p2) = do st <- pattVars st p1
+                                      pattVars st p2
+pattVars st _            = return st
 
-string2value s =
-  case words s of
-    []  -> VC []
-    [w] -> VStr w
-    ws  -> VC (map VStr ws)
+data ConstValue a
+  = Const a
+  | RunTime
+  | NonExist
 
-value2int (VInt n) = Just n
-value2int _        = Nothing
+instance Functor ConstValue where
+  fmap f (Const c) = Const (f c)
+  fmap f RunTime   = RunTime
+  fmap f NonExist  = NonExist
+
+instance Applicative ConstValue where
+  pure = Const
+
+  (Const f) <*> (Const x) = Const (f x)
+  NonExist  <*> _         = NonExist
+  _         <*> NonExist  = NonExist
+  RunTime   <*>  _        = RunTime
+  _         <*>  RunTime  = RunTime
+
+#if MIN_VERSION_base(4,10,0)
+  liftA2 f (Const a) (Const b) = Const (f a b)
+  liftA2 f NonExist  _         = NonExist
+  liftA2 f _         NonExist  = NonExist
+  liftA2 f RunTime   _         = RunTime
+  liftA2 f _         RunTime   = RunTime
+#endif
+
+value2string v = fmap (\(_,ws,_) -> unwords ws) (value2string' v False [] [])
+
+value2string' (VStr w1)   True (w2:ws) qs = Const (False,(w1++w2):ws,qs)
+value2string' (VStr w)    _    ws      qs = Const (False,w       :ws,qs)
+value2string' VEmpty      b    ws      qs = Const (b,ws,qs)
+value2string' (VC v1 v2)  b    ws      qs =
+  case value2string' v2 b ws qs of
+    Const (b,ws,qs) -> value2string' v1 b ws qs
+    res             -> res
+value2string' (VApp q []) b    ws      qs
+  | q == (cPredef,cNonExist)              = NonExist
+value2string' (VApp q []) b    ws      qs
+  | q == (cPredef,cSOFT_SPACE)            = if null ws
+                                              then Const (b,ws,q:qs)
+                                              else Const (b,ws,qs)
+value2string' (VApp q []) b     ws     qs
+  | q == (cPredef,cBIND) || q == (cPredef,cSOFT_BIND) 
+                                          = if null ws
+                                              then Const (True,ws,q:qs)
+                                              else Const (True,ws,qs)
+value2string' (VApp q []) b     ws     qs
+  | q == (cPredef,cCAPIT) = capit ws
+  where
+    capit []            = Const (b,[],q:qs)
+    capit ((c:cs) : ws) = Const (b,(toUpper c : cs) : ws,qs)
+    capit ws            = Const (b,ws,qs)
+value2string' (VApp q []) b     ws     qs
+  | q == (cPredef,cALL_CAPIT) = all_capit ws
+  where
+    all_capit []       = Const (b,[],q:qs)
+    all_capit (w : ws) = Const (b,map toUpper w : ws,qs)
+value2string' (VAlts vd vas) b  ws     qs =
+  case ws of
+    []    -> value2string' vd b ws qs
+    (w:_) -> pre vd vas w b ws qs
+  where
+    pre vd []                 w            = value2string' vd
+    pre vd ((v,VStrs ss):vas) w
+      | or [startsWith s w | VStr s <- ss] = value2string' v
+      | otherwise                          = pre vd vas w
+value2string' _ _ _ _ = RunTime
+
+startsWith []          _ = True
+startsWith (x:xs) (y:ys)
+  | x == y               = startsWith xs ys
+startsWith      _      _ = False
+
+
+string2value s = string2value' (words s)
+
+string2value' []     = VEmpty
+string2value' [w]    = VStr w
+string2value' (w:ws) = VC (VStr w) (string2value' ws)
+
+value2int (VInt n) = Const n
+value2int _        = RunTime
 
 -----------------------------------------------------------------------
 -- * Evaluation monad
@@ -496,43 +742,60 @@ newEvaluatedThunk v = EvalM $ \gr k mt r -> do
  tnk <- newSTRef (Evaluated v)
  k tnk mt r
 
-newMeta mb_ty i = EvalM $ \gr k mt r ->
+newResiduation i = EvalM $ \gr k mt r ->
   if i == 0
-    then do tnk <- newSTRef (Unbound mb_ty i)
+    then do tnk <- newSTRef (Residuation i)
             k tnk mt r
     else case Map.lookup i mt of
            Just tnk -> k tnk mt r
-           Nothing  -> do tnk <- newSTRef (Unbound mb_ty i)
+           Nothing  -> do tnk <- newSTRef (Residuation i)
                           k tnk (Map.insert i tnk mt) r
 
-getMeta tnk    = EvalM $ \gr k mt r -> readSTRef tnk >>= \st -> k st mt r
+newNarrowing i ty = EvalM $ \gr k mt r ->
+  if i == 0
+    then do tnk <- newSTRef (Narrowing i ty)
+            k tnk mt r
+    else case Map.lookup i mt of
+           Just tnk -> k tnk mt r
+           Nothing  -> do tnk <- newSTRef (Narrowing i ty)
+                          k tnk (Map.insert i tnk mt) r
 
-setMeta tnk st = EvalM $ \gr k mt r -> do
-  old <- readSTRef tnk
-  writeSTRef tnk st
-  r <- k () mt r
-  writeSTRef tnk old
-  return r
+getVariables :: EvalM s [(LVar,LIndex)]
+getVariables = EvalM $ \gr k mt r -> do
+  ps <- metas2params gr (Map.elems mt)
+  k ps mt r
+  where
+    metas2params gr []         = return []
+    metas2params gr (tnk:tnks) = do
+      st <- readSTRef tnk
+      case st of
+        Narrowing i ty -> do let cnt = case allParamValues gr ty of
+                                         Ok ts   -> length ts
+                                         Bad msg -> error msg
+                             params <- metas2params gr tnks
+                             if cnt > 1
+                               then return ((i-1,cnt):params)
+                               else return params
+        _              -> metas2params gr tnks
 
-newGen i = EvalM $ \gr k mt r -> do
- tnk <- newSTRef (Evaluated (VGen i []))
- k tnk mt r
+getRef tnk = EvalM $ \gr k mt r -> readSTRef tnk >>= \st -> k st mt r
 
-force tnk vs = EvalM $ \gr k mt r -> do 
+force tnk = EvalM $ \gr k mt r -> do 
   s <- readSTRef tnk
   case s of
-    Unevaluated env t -> case eval env t vs of
+    Unevaluated env t -> case eval env t [] of
                            EvalM f -> f gr (\v mt r -> do writeSTRef tnk (Evaluated v)
                                                           r <- k v mt r
                                                           writeSTRef tnk s
                                                           return r) mt r
-    Evaluated v       -> case apply v vs of
-                           EvalM f -> f gr k mt r
-    Unbound _ _       -> k (VMeta tnk [] vs) mt r
+    Evaluated v       -> k v mt r
+    Residuation _     -> k (VMeta tnk [] []) mt r
+    Narrowing _ _     -> k (VMeta tnk [] []) mt r
 
 zonk tnk vs = EvalM $ \gr k mt r -> do
   s <- readSTRef tnk
   case s of
-    Evaluated v -> case apply v vs of
-                     EvalM f -> f gr (k . Left) mt r
-    Unbound _ i -> k (Right i) mt r
+    Evaluated v   -> case apply v vs of
+                       EvalM f -> f gr (k . Left) mt r
+    Residuation i -> k (Right i) mt r
+    Narrowing i _ -> k (Right i) mt r

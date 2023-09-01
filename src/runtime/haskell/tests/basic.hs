@@ -6,6 +6,7 @@ import PGF2
 
 main = do
   g <- newStdGen
+
   let
     limit = 10 ^ 100
     ns    = take 5000 (randomRs (-limit,limit) g)
@@ -14,9 +15,9 @@ main = do
     grammarTests gr =
       [TestCase (assertEqual "abstract names" "basic" (abstractName gr))
       ,TestCase (assertEqual "abstract categories" ["Float","Int","N","P","S","String"] (categories gr))
-      ,TestCase (assertEqual "abstract functions" ["c","ind","s","z"] (functions gr))
+      ,TestCase (assertEqual "abstract functions" ["c","floatLit","ind","intLit","nat","s","stringLit","z"] (functions gr))
       ,TestCase (assertEqual "abstract functions by cat 1" ["s","z"] (functionsByCat gr "N"))
-      ,TestCase (assertEqual "abstract functions by cat 2" ["c"] (functionsByCat gr "S"))
+      ,TestCase (assertEqual "abstract functions by cat 2" ["c","floatLit","intLit","stringLit"] (functionsByCat gr "S"))
       ,TestCase (assertEqual "abstract functions by cat 2" [] (functionsByCat gr "X")) -- no such category
       ,TestCase (assertBool  "type of z" (eqJust (readType "N")    (functionType gr "z")))
       ,TestCase (assertBool  "type of s" (eqJust (readType "N->N") (functionType gr "s")))
@@ -65,8 +66,8 @@ main = do
       ,TestCase (assertEqual "fresh variables 1" "\\v,v1->v1" (showExpr [] (EAbs Explicit "v" (EAbs Explicit "v" (EVar 0)))))
       ,TestCase (assertEqual "fresh variables 2" "\\v,v1->v" (showExpr [] (EAbs Explicit "v" (EAbs Explicit "v" (EVar 1)))))
       ,TestCase (assertEqual "fresh variables 3" "\\v,v1,v2->v1" (showExpr [] (EAbs Explicit "v" (EAbs Explicit "v" (EAbs Explicit "v" (EVar 1))))))
-      ,TestCase (assertBool "large integer 1" (null [n | n <- ns, showExpr [] (ELit (LInt n)) /= show n]))
-      ,TestCase (assertBool "large integer 2" (null [n | n <- ns, readExpr (show n) /= Just (ELit (LInt n))]))
+      ,TestCase (assertEqual "large integer 1" [] [n | n <- ns, showExpr [] (ELit (LInt n)) /= show n])
+      ,TestCase (assertEqual "large integer 2" [] [n | n <- ns, readExpr (show n) /= Just (ELit (LInt n))])
       ,TestCase (assertEqual "unicode names 1" (Just "'абв'") (fmap (showExpr []) (readExpr "'абв'")))
       ,TestCase (assertEqual "unicode names 2" (Just "ab") (fmap (showExpr []) (readExpr "'ab'")))
       ,TestCase (assertEqual "unicode names 3" (Just "a'b") (fmap (showExpr []) (readExpr "'a\\'b'")))
@@ -79,6 +80,7 @@ main = do
   gr1 <- readPGF "tests/basic.pgf"
   gr2 <- bootNGF "tests/basic.pgf" "tests/basic.ngf"
   gr3 <- readNGF "tests/basic.ngf"
+  pmcfg <- readFile "tests/basic.pmcfg"
 
   rp1 <- testLoadFailure (readPGF "non-existing.pgf")
   rp2 <- testLoadFailure (readPGF "tests/basic.gf")
@@ -86,7 +88,7 @@ main = do
 
   bn1 <- testLoadFailure (bootNGF "non-existing.pgf" "non-existing.ngf")
   bn2 <- testLoadFailure (bootNGF "tests/basic.gf" "tests/basic.ngf")
-  bn3 <- testLoadFailure (bootNGF "tests/basic.ngf" "tests/basic.pgf")
+  bn3 <- testLoadFailure (bootNGF "tests/basic.ngf" "tests/tmp.pgf")
 
   rn2 <- testLoadFailure (readNGF "tests/basic.gf")
   rn3 <- testLoadFailure (readNGF "tests/basic.pgf")
@@ -103,6 +105,8 @@ main = do
 
       ,TestCase (assertBool "wrong file format (GF)" rn2)
       ,TestCase (assertBool "wrong file format (PGF)" rn3)
+
+      ,TestCase (assertEqual "show pgf" (init pmcfg) (showPGF gr1))
       ]
       ++ grammarTests gr1
       ++ grammarTests gr2

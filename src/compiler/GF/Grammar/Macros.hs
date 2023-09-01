@@ -152,12 +152,6 @@ isVariable :: Term -> Bool
 isVariable (Vr _ ) = True
 isVariable _ = False
 
---eqIdent :: Ident -> Ident -> Bool
---eqIdent = (==)
-
-uType :: Type
-uType = Cn cUndefinedType
-
 -- *** Assignment
 
 assign :: Label -> Term -> Assign
@@ -297,53 +291,17 @@ defLinType :: Type
 defLinType = RecType [(theLinLabel,  typeStr)]
 
 -- | refreshing variables
-mkFreshVar :: [Ident] -> Ident
-mkFreshVar olds = varX (maxVarIndex olds + 1)
+mkFreshVar :: [Ident] -> Ident -> Ident
+mkFreshVar olds x =
+  case maximum ((-1) : map (varIndex' rx) olds) + 1 of
+    0 -> x
+    i -> identV rx i
+  where
+    rx = ident2raw x
 
 -- | trying to preserve a given symbol
 mkFreshVarX :: [Ident] -> Ident -> Ident
-mkFreshVarX olds x = if (elem x olds) then (varX (maxVarIndex olds + 1)) else x
-
-maxVarIndex :: [Ident] -> Int
-maxVarIndex = maximum . ((-1):) . map varIndex
-
-mkFreshVars :: Int -> [Ident] -> [Ident]
-mkFreshVars n olds = [varX (maxVarIndex olds + i) | i <- [1..n]]
-
--- | quick hack for refining with var in editor
-freshAsTerm :: String -> Term
-freshAsTerm s = Vr (varX (readIntArg s))
-
--- | create a terminal for concrete syntax
-string2term :: String -> Term
-string2term = K
-
-int2term :: Integer -> Term
-int2term = EInt
-
-float2term :: Double -> Term
-float2term = EFloat
-
--- | create a terminal from identifier
-ident2terminal :: Ident -> Term
-ident2terminal = K . showIdent
-
-symbolOfIdent :: Ident -> String
-symbolOfIdent = showIdent
-
-symid :: Ident -> String
-symid = symbolOfIdent
-
-justIdentOf :: Term -> Maybe Ident
-justIdentOf (Vr x) = Just x
-justIdentOf (Cn x) = Just x
-justIdentOf _ = Nothing
-
-linTypeStr :: Type
-linTypeStr = mkRecType linLabel [typeStr] -- default lintype {s :: Str}
-
-linAsStr :: String -> Term
-linAsStr s = mkRecord linLabel [K s] -- default linearization {s = s}
+mkFreshVarX olds x = if (elem x olds) then (varX (maximum ((-1) : (map varIndex olds)) + 1)) else x
 
 -- *** Term and pattern conversion
 
@@ -514,18 +472,6 @@ collectPattOp op patt =
 
 -- *** Misc
 
-redirectTerm :: ModuleName -> Term -> Term
-redirectTerm n t = case t of
-  QC (_,f) -> QC (n,f)
-  Q  (_,f) -> Q  (n,f)
-  _ -> composSafeOp (redirectTerm n) t
-
--- | to gather ultimate cases in a table; preserves pattern list
-allCaseValues :: Term -> [([Patt],Term)]
-allCaseValues trm = case trm of
-  T _ cs -> [(p:ps, t) | (p,t0) <- cs, (ps,t) <- allCaseValues t0]
-  _      -> [([],trm)]
-
 -- | to get a string from a term that represents a sequence of terminals
 strsFromTerm :: Term -> Err [Str]
 strsFromTerm t = case t of
@@ -553,34 +499,12 @@ strsFromTerm t = case t of
   Strs ts -> mapM strsFromTerm ts >>= return . concat
   _ -> raise (render ("cannot get Str from term" <+> ppTerm Unqualified 0 t))
 
-getTableType :: TInfo -> Err Type
-getTableType i = case i of
-  TTyped ty -> return ty
-  TComp ty  -> return ty
-  TWild ty  -> return ty
-  _ -> Bad "the table is untyped"
-
 changeTableType :: Monad m => (Type -> m Type) -> TInfo -> m TInfo
 changeTableType co i = case i of
     TTyped ty -> co ty >>= return . TTyped
     TComp ty  -> co ty >>= return . TComp
     TWild ty  -> co ty >>= return . TWild
     _ -> return i
-
--- | to find the word items in a term
-wordsInTerm :: Term -> [String]
-wordsInTerm trm = filter (not . null) $ case trm of
-   K s     -> [s]
-   S c _   -> wo c
-   Alts t aa -> wo t ++ concatMap (wo . fst) aa
-   _       -> collectOp wo trm
- where wo = wordsInTerm
-
-noExist :: Term
-noExist = FV []
-
-defaultLinType :: Type
-defaultLinType = mkRecType linLabel [typeStr]
 
 -- | normalize records and record types; put s first
 
@@ -633,3 +557,20 @@ topoSortJments2 (m,mi) = do
            (topoTest2 (allDependencies (==m) (jments mi)))
   return
     [[(i,info) | i<-is,Just info<-[Map.lookup i (jments mi)]] | is<-iss]
+
+
+mkStrs p = case p of
+ PAlt a b -> do
+   Strs as <- mkStrs a
+   Strs bs <- mkStrs b
+   return $ Strs $ as ++ bs
+ PSeq _ _ a _ _ b ->
+             do Strs as <- mkStrs a
+                Strs bs <- mkStrs b
+                return $ Strs $ [K (a++b) | K a <- as, K b <- bs]
+ PString s -> return $ Strs [K s]
+ PChars cs -> return $ Strs [K [c] | c <- cs]
+ PV x -> return (Vr x) --- for macros; not yet complete
+ PMacro x -> return (Vr x) --- for macros; not yet complete
+ PM c -> return (Q c) --- for macros; not yet complete
+ _ -> fail "no strs from pattern"

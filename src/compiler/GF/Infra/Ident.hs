@@ -18,9 +18,8 @@ module GF.Infra.Ident (-- ** Identifiers
   -- *** Normal identifiers (returned by the parser)
   identS, identC, identW,
   -- *** Special identifiers for internal use
-  identV, identA, identAV,
-  argIdent, isArgIdent, getArgIndex,
-  varStr, varX, isWildIdent, varIndex,
+  identV,
+  varStr, varX, varIndex, varIndex',
   -- *** Raw identifiers
   RawIdent, rawIdentS, rawIdentC, ident2raw, prefixRawIdent,
   isPrefixOf, showRawIdent
@@ -43,6 +42,9 @@ moduleNameS = MN . identS
 instance Show ModuleName where showsPrec d (MN m) = showsPrec d m
 instance Pretty ModuleName where pp (MN m) = pp m
 
+instance Binary ModuleName where
+  put (MN id) = put id
+  get = fmap MN get
 
 -- | the constructors labelled /INTERNAL/ are
 -- internal representation never returned by the parser
@@ -52,9 +54,6 @@ data Ident =
 --
 -- below this constructor: internal representation never returned by the parser
  | IV  {-# UNPACK #-} !RawIdent {-# UNPACK #-} !Int                       -- ^ /INTERNAL/ variable
- | IA  {-# UNPACK #-} !RawIdent {-# UNPACK #-} !Int                       -- ^ /INTERNAL/ argument of cat at position
- | IAV {-# UNPACK #-} !RawIdent {-# UNPACK #-} !Int {-# UNPACK #-} !Int   -- ^ /INTERNAL/ argument of cat with bindings at position
---
   deriving (Eq, Ord, Show, Read)
 
 -- | Identifiers are stored as UTF-8-encoded bytestrings.
@@ -73,6 +72,13 @@ showRawIdent = unpack . rawId2utf8
 prefixRawIdent (Id x) (Id y) = Id (BS.append x y)
 isPrefixOf (Id x) (Id y) = BS.isPrefixOf x y
 
+instance Binary Ident where
+  put id = put (ident2utf8 id)
+  get    = do bs <- get
+              if bs == wild
+                then return identW
+                else return (identC (rawIdentC bs))
+
 instance Binary RawIdent where
   put = put . rawId2utf8
   get = fmap rawIdentC get
@@ -83,9 +89,7 @@ ident2utf8 :: Ident -> UTF8.ByteString
 ident2utf8 i = case i of
   IC (Id s) -> s
   IV (Id s) n -> BS.append s (pack ('_':show n))
-  IA (Id s) j -> BS.append s (pack ('_':show j))
-  IAV (Id s) b j -> BS.append s (pack ('_':show b ++ '_':show j))
-  IW -> pack "_"
+  IW -> wild
 
 ident2raw :: Ident -> RawIdent
 ident2raw = Id . ident2utf8
@@ -106,50 +110,28 @@ identW :: Ident
 prefixIdent :: String -> Ident -> Ident
 prefixIdent pref = identC . Id . BS.append (pack pref) . ident2utf8
 
--- normal identifier
--- ident s = IC s
-
 identV :: RawIdent -> Int -> Ident
-identA :: RawIdent -> Int -> Ident
-identAV:: RawIdent -> Int -> Int -> Ident
 
-(identC, identV, identA, identAV, identW) =
-    (IC,     IV,     IA,     IAV,     IW)
-
--- | to mark argument variables
-argIdent :: Int -> Ident -> Int -> Ident
-argIdent 0 (IC c) i = identA  c i
-argIdent b (IC c) i = identAV c b i
-
-isArgIdent IA{}  = True
-isArgIdent IAV{} = True
-isArgIdent _     = False
-
-getArgIndex (IA _ i)    = Just i
-getArgIndex (IAV _ _ i) = Just i
-getArgIndex (IC (Id bs))
-  | isDigit c =
-   -- (Just . read . unpack . snd . BS.spanEnd isDigit) bs -- not ok with UTF-8
-      (Just . read . reverse . takeWhile isDigit) s
-  where s@(c:_) = reverse (unpack bs)
-getArgIndex x = Nothing
+(identC, identV, identW) =
+    (IC,     IV,     IW)
 
 -- | used in lin defaults
 varStr :: Ident
-varStr = identA (rawIdentS "str") 0
+varStr = identS "str"
 
 -- | refreshing variables
 varX :: Int -> Ident
 varX = identV (rawIdentS "x")
 
-isWildIdent :: Ident -> Bool
-isWildIdent x = case x of
-  IW -> True
-  IC s | s == wild -> True
-  _ -> False
-
-wild = Id (pack "_")
+wild = pack "_"
 
 varIndex :: Ident -> Int
 varIndex (IV _ n) = n
 varIndex _ = -1 --- other than IV should not count
+
+varIndex' :: RawIdent -> Ident -> Int
+varIndex' x (IC y)
+  | x == y    = 0
+varIndex' x (IV y n)
+  | x == y    = n
+varIndex' _ _ = -1 --- other than IV should not count

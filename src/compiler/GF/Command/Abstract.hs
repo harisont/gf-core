@@ -1,6 +1,6 @@
-module GF.Command.Abstract(module GF.Command.Abstract,Expr,showExpr,Term) where
+module GF.Command.Abstract(module GF.Command.Abstract,Expr,showExpr,Literal(..),Term) where
 
-import PGF2(Expr,showExpr)
+import PGF2
 import GF.Grammar.Grammar(Term)
 
 type Ident = String
@@ -13,15 +13,22 @@ data Command
    = Command Ident [Option] Argument
    deriving Show
 
+data TransactionCommand
+   = CreateFun [Option] Fun Type
+   | CreateCat [Option] Cat [Hypo]
+   | CreateConcrete [Option] ConcName
+   | CreateLin [Option] Fun Term Bool
+   | CreateLincat [Option] Cat Term
+   | DropFun [Option] Fun
+   | DropCat [Option] Cat
+   | DropConcrete [Option] ConcName
+   | DropLin [Option] Fun
+   | DropLincat [Option] Cat
+   deriving Show
+
 data Option
   = OOpt Ident
-  | OFlag Ident Value
-  deriving (Eq,Ord,Show)
-
-data Value
-  = VId  Ident
-  | VInt Int
-  | VStr String
+  | OFlag Ident Literal
   deriving (Eq,Ord,Show)
 
 data Argument
@@ -33,9 +40,19 @@ data Argument
 
 valIntOpts :: String -> Int -> [Option] -> Int
 valIntOpts flag def opts =
-  case [v | OFlag f (VInt v) <- opts, f == flag] of
+  case [v | OFlag f (LInt v) <- opts, f == flag] of
+    (v:_) -> fromIntegral v
+    _     -> def
+
+valFltOpts :: String -> Double -> [Option] -> Double
+valFltOpts flag def opts =
+  case [v | OFlag f v <- opts, v <- toFlt v, f == flag] of
     (v:_) -> v
     _     -> def
+  where
+    toFlt (LInt v) = [fromIntegral v]
+    toFlt (LFlt f) = [f]
+    toFlt _        = []
 
 valStrOpts :: String -> String -> [Option] -> String
 valStrOpts flag def opts =
@@ -45,8 +62,8 @@ valStrOpts flag def opts =
 
 maybeIntOpts :: String -> a -> (Int -> a) -> [Option] -> a
 maybeIntOpts flag def fn opts =
-  case [v | OFlag f (VInt v) <- opts, f == flag] of
-    (v:_) -> fn v
+  case [v | OFlag f (LInt v) <- opts, f == flag] of
+    (v:_) -> fn (fromIntegral v)
     _     -> def
 
 maybeStrOpts :: String -> a -> (String -> a) -> [Option] -> a
@@ -59,9 +76,9 @@ listFlags flag opts = [v | OFlag f v <- opts, f == flag]
 
 valueString v =
   case v of
-    VStr v -> v
-    VId  v -> v
-    VInt v -> show v
+    LInt v -> show v
+    LFlt v -> show v
+    LStr v -> v
 
 isOpt :: String -> [Option] -> Bool
 isOpt o opts = elem (OOpt o) opts

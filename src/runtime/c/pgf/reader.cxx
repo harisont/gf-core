@@ -1,11 +1,15 @@
 #include "data.h"
 #include "reader.h"
+#include "parser.h"
 #include <math.h>
 #include <string.h>
 
-PgfReader::PgfReader(FILE *in)
+PgfReader::PgfReader(FILE *in,PgfProbsCallback *probs_callback)
 {
     this->in = in;
+    this->probs_callback = probs_callback;
+    this->abstract = 0;
+    this->concrete = 0;
 }
 
 uint8_t PgfReader::read_uint8()
@@ -69,6 +73,15 @@ double PgfReader::read_double()
 	return sign ? copysign(ret, -1.0) : ret;
 }
 
+prob_t PgfReader::read_prob(PgfText *name)
+{
+    double d = read_double();
+    if (probs_callback != NULL) {
+        d = probs_callback->fn(probs_callback, name);
+    }
+    return - logf(d);
+}
+
 uint64_t PgfReader::read_uint()
 {
 	uint64_t u = 0;
@@ -82,7 +95,7 @@ uint64_t PgfReader::read_uint()
 	return u;
 }
 
-object PgfReader::read_name_internal(size_t struct_size)
+object PgfReader::read_text_internal(size_t struct_size)
 {
     size_t size = read_len();
 	object offs = current_db->malloc_internal(struct_size+sizeof(PgfText)+size+1);
@@ -102,51 +115,6 @@ object PgfReader::read_name_internal(size_t struct_size)
 	return offs;
 }
 
-object PgfReader::read_text_internal(size_t struct_size)
-{
-    size_t len  = read_len();
-
-    char* buf = (char*) alloca(len*6+1);
-	char* p   = buf;
-	for (size_t i = 0; i < len; i++) {
-        uint8_t c = read_uint8();
-        *(p++) = (char) c;
-
-        if (c < 0x80) {
-            continue;
-        }
-        if (c < 0xc2) {
-            throw pgf_error("utf8 decoding error");
-        }
-
-        int len = (c < 0xe0 ? 1 :
-                   c < 0xf0 ? 2 :
-                   c < 0xf8 ? 3 :
-                   c < 0xfc ? 4 :
-                              5
-                   );
-        // If reading the extra bytes causes EOF, it is an encoding
-        // error, not a legitimate end of character stream.
-        fread(p, len, 1, in);
-        if (feof(in))
-            throw pgf_error("utf8 decoding error");
-        if (ferror(in))
-            throw pgf_error("an error occured while reading the grammar");
-
-        p += len;
-	}
-
-    size_t size = p-buf;
-	*p++ = 0;
-
-	object offs = current_db->malloc_internal(struct_size+sizeof(PgfText)+size+1);
-    PgfText* ptext = (PgfText*) (current_base+offs+struct_size);
-    ptext->size = size;
-	memcpy(ptext->text, buf, size+1);
-
-	return offs;
-}
-
 template<class V>
 Namespace<V> PgfReader::read_namespace(ref<V> (PgfReader::*read_value)(), size_t len)
 {
@@ -158,7 +126,11 @@ Namespace<V> PgfReader::read_namespace(ref<V> (PgfReader::*read_value)(), size_t
     ref<V> value = (this->*read_value)();
     Namespace<V> right = read_namespace(read_value, len-half-1);
 
-    return Node<V>::new_node(value, left, right);
+    Namespace<V> node = Node<ref<V>>::new_node(value);
+    node->sz   = 1+Node<ref<V>>::size(left)+Node<ref<V>>::size(right);
+    node->left  = left;
+    node->right = right;
+    return node;
 }
 
 template<class V>
@@ -168,22 +140,32 @@ Namespace<V> PgfReader::read_namespace(ref<V> (PgfReader::*read_value)())
     return read_namespace(read_value, len);
 }
 
+template<class V>
+void PgfReader::merge_namespace(ref<V> (PgfReader::*read_value)())
+{
+    size_t len = read_len();
+    for (size_t i = 0; i < len; i++) {
+        ref<V> value = (this->*read_value)();
+        V::release(value);
+    }
+}
+
 template <class C, class V>
-ref<C> PgfReader::read_vector(PgfVector<V> C::* field, void (PgfReader::*read_value)(ref<V> val))
+ref<C> PgfReader::read_vector(Vector<V> C::* field, void (PgfReader::*read_value)(ref<V> val))
 {
     size_t len = read_len();
     ref<C> loc = vector_new<C,V>(field,len);
     for (size_t i = 0; i < len; i++) {
-        (this->*read_value)(vector_elem(ref<PgfVector<V>>::from_ptr(&(loc->*field)),i));
+        (this->*read_value)(vector_elem(ref<Vector<V>>::from_ptr(&(loc->*field)),i));
     }
     return loc;
 }
 
 template <class V>
-ref<PgfVector<V>> PgfReader::read_vector(void (PgfReader::*read_value)(ref<V> val))
+ref<Vector<V>> PgfReader::read_vector(void (PgfReader::*read_value)(ref<V> val))
 {
     size_t len = read_len();
-    ref<PgfVector<V>> vec = vector_new<V>(len);
+    ref<Vector<V>> vec = vector_new<V>(len);
     for (size_t i = 0; i < len; i++) {
         (this->*read_value)(vector_elem(vec,i));
     }
@@ -199,22 +181,25 @@ PgfLiteral PgfReader::read_literal()
 	case PgfLiteralStr::tag: {
 		ref<PgfLiteralStr> lit_str =
             read_text<PgfLiteralStr>(&PgfLiteralStr::val);
-        lit = ref<PgfLiteralStr>::tagged(lit_str);
+        lit = lit_str.tagged();
 		break;
 	}
 	case PgfLiteralInt::tag: {
+        size_t size = read_len();
 		ref<PgfLiteralInt> lit_int =
-			PgfDB::malloc<PgfLiteralInt>(sizeof(uintmax_t));
-        lit_int->size   = 1;
-		lit_int->val[0] = read_int();
-        lit = ref<PgfLiteralInt>::tagged(lit_int);
+			PgfDB::malloc<PgfLiteralInt>(sizeof(uintmax_t)*size);
+        lit_int->size   = size;
+        for (size_t i = 0; i < size; i++) {
+            lit_int->val[i] = (uintmax_t) read_uint();
+        }
+        lit = lit_int.tagged();
 		break;
 	}
 	case PgfLiteralFlt::tag: {
 		ref<PgfLiteralFlt> lit_flt =
 			current_db->malloc<PgfLiteralFlt>();
 		lit_flt->val = read_double();
-        lit = ref<PgfLiteralFlt>::tagged(lit_flt);
+        lit = lit_flt.tagged();
 		break;
 	}
 	default:
@@ -226,7 +211,6 @@ PgfLiteral PgfReader::read_literal()
 ref<PgfFlag> PgfReader::read_flag()
 {
     ref<PgfFlag> flag = read_name(&PgfFlag::name);
-    flag->ref_count = 1;
     flag->value = read_literal();
     return flag;
 }
@@ -241,51 +225,58 @@ PgfExpr PgfReader::read_expr()
         PgfBindType bind_type = (PgfBindType) read_tag();
         ref<PgfExprAbs> eabs = read_name(&PgfExprAbs::name);
         eabs->bind_type = bind_type;
-        eabs->body = read_expr();
-        expr = ref<PgfExprAbs>::tagged(eabs);
+        PgfExpr body = read_expr();
+        eabs->body = body;
+        expr = eabs.tagged();
 		break;
 	}
 	case PgfExprApp::tag: {
+        PgfExpr fun = read_expr();
+        PgfExpr arg = read_expr();
         ref<PgfExprApp> eapp = PgfDB::malloc<PgfExprApp>();
-		eapp->fun = read_expr();
-		eapp->arg = read_expr();
-        expr = ref<PgfExprApp>::tagged(eapp);
+        eapp->fun = fun;
+        eapp->arg = arg;
+        expr = eapp.tagged();
 		break;
 	}
 	case PgfExprLit::tag: {
+        PgfExpr lit = read_literal();
         ref<PgfExprLit> elit = PgfDB::malloc<PgfExprLit>();
-		elit->lit = read_literal();
-		expr = ref<PgfExprLit>::tagged(elit);
+        elit->lit = lit;
+        expr = elit.tagged();
 		break;
 	}
 	case PgfExprMeta::tag: {
 		ref<PgfExprMeta> emeta = PgfDB::malloc<PgfExprMeta>();
 		emeta->id = read_int();
-		expr = ref<PgfExprMeta>::tagged(emeta);
+		expr = emeta.tagged();
 		break;
 	}
 	case PgfExprFun::tag: {
 		ref<PgfExprFun> efun = read_name(&PgfExprFun::name);
-        expr = ref<PgfExprFun>::tagged(efun);
+        expr = efun.tagged();
 		break;
 	}
 	case PgfExprVar::tag: {
         ref<PgfExprVar> evar = PgfDB::malloc<PgfExprVar>();
 		evar->var = read_int();
-        expr = ref<PgfExprVar>::tagged(evar);
+        expr = evar.tagged();
 		break;
 	}
 	case PgfExprTyped::tag: {
+        auto expr = read_expr();
+        auto type = read_type();
         ref<PgfExprTyped> etyped = PgfDB::malloc<PgfExprTyped>();
-		etyped->expr = read_expr();
-		etyped->type = read_type();
-        expr = ref<PgfExprTyped>::tagged(etyped);
-		break;
+        etyped->expr = expr;
+        etyped->type = type.as_object();
+        expr = etyped.tagged();
+        break;
 	}
 	case PgfExprImplArg::tag: {
+        auto expr = read_expr();
         ref<PgfExprImplArg> eimpl = current_db->malloc<PgfExprImplArg>();
-		eimpl->expr = read_expr();
-        expr = ref<PgfExprImplArg>::tagged(eimpl);
+        eimpl->expr = expr;
+        expr = eimpl.tagged();
 		break;
 	}
 	default:
@@ -298,141 +289,499 @@ PgfExpr PgfReader::read_expr()
 void PgfReader::read_hypo(ref<PgfHypo> hypo)
 {
     hypo->bind_type = (PgfBindType) read_tag();
-	hypo->cid = read_name();
-	hypo->type = read_type();
+    auto cid = read_name();
+    hypo->cid = cid;
+    auto type = read_type();
+    hypo->type = type;
 }
 
 ref<PgfDTyp> PgfReader::read_type()
 {
-    ref<PgfVector<PgfHypo>> hypos =
+    auto hypos =
         read_vector<PgfHypo>(&PgfReader::read_hypo);
     ref<PgfDTyp> tp = read_name<PgfDTyp>(&PgfDTyp::name);
     tp->hypos = hypos;
-    tp->exprs =
+    auto exprs =
         read_vector<PgfExpr>(&PgfReader::read_expr);
+    tp->exprs = exprs;
     return tp;
 }
 
-PgfPatt PgfReader::read_patt()
-{
-    PgfPatt patt = 0;
-
-	uint8_t tag = read_tag();
-	switch (tag) {
-	case PgfPattApp::tag: {
-		ref<PgfText> ctor = read_name();
-
-		ref<PgfPattApp> papp =
-            read_vector<PgfPattApp,PgfPatt>(&PgfPattApp::args,&PgfReader::read_patt2);
-		papp->ctor = ctor;
-        patt = ref<PgfPattApp>::tagged(papp);
-		break;
-	}
-	case PgfPattVar::tag: {
-		ref<PgfPattVar> pvar = read_name<PgfPattVar>(&PgfPattVar::name);
-        patt = ref<PgfPattVar>::tagged(pvar);
-		break;
-	}
-	case PgfPattAs::tag: {
-        ref<PgfPattAs> pas = read_name<PgfPattAs>(&PgfPattAs::name);
-		pas->patt = read_patt();
-        patt = ref<PgfPattAs>::tagged(pas);
-		break;
-	}
-	case PgfPattWild::tag: {
-		ref<PgfPattWild> pwild = PgfDB::malloc<PgfPattWild>();
-        patt = ref<PgfPattWild>::tagged(pwild);
-		break;
-	}
-	case PgfPattLit::tag: {
-        ref<PgfPattLit> plit = PgfDB::malloc<PgfPattLit>();
-		plit->lit = read_literal();
-        patt = ref<PgfPattLit>::tagged(plit);
-		break;
-	}
-	case PgfPattImplArg::tag: {
-        ref<PgfPattImplArg> pimpl = PgfDB::malloc<PgfPattImplArg>();
-		pimpl->patt = read_patt();
-        patt = ref<PgfPattImplArg>::tagged(pimpl);
-		break;
-	}
-	case PgfPattTilde::tag: {
-        ref<PgfPattTilde> ptilde = PgfDB::malloc<PgfPattTilde>();
-		ptilde->expr = read_expr();
-        patt = ref<PgfPattTilde>::tagged(ptilde);
-		break;
-	}
-	default:
-		throw pgf_error("Unknown pattern tag");
-	}
-
-	return patt;
-}
-
-void PgfReader::read_defn(ref<ref<PgfEquation>> defn)
-{
-    ref<PgfEquation> eq = read_vector(&PgfEquation::patts,&PgfReader::read_patt2);
-    eq->body = read_expr();
-    *defn = eq;
-}
-
-ref<PgfAbsFun> PgfReader::read_absfun()
+ref<PgfAbsFun> PgfReader::read_absfun_only()
 {
     ref<PgfAbsFun> absfun =
         read_name<PgfAbsFun>(&PgfAbsFun::name);
-    absfun->ref_count = 1;
-    ref<PgfExprFun> efun =
-        ref<PgfExprFun>::from_ptr((PgfExprFun*) &absfun->name);
-    absfun->ep.expr = ref<PgfExprFun>::tagged(efun);
-    absfun->type = read_type();
+    auto type = read_type();
+    absfun->type = type;
 	absfun->arity = read_int();
 
     uint8_t tag = read_tag();
 	switch (tag) {
 	case 0:
-        absfun->defns = 0;
+        absfun->bytecode = 0;
         break;
-    case 1:
-        absfun->defns =
-            read_vector<ref<PgfEquation>>(&PgfReader::read_defn);
+    case 1: {
+        read_len();
+        auto dummy = PgfDB::malloc<char>(0);
+        absfun->bytecode = dummy;
         break;
+    }
     default:
         throw pgf_error("Unknown tag, 0 or 1 expected");
     }
-    absfun->ep.prob = - log(read_double());
+    absfun->prob = read_prob(&absfun->name);
+
+    return absfun;
+}
+
+ref<PgfAbsFun> PgfReader::read_absfun()
+{
+    ref<PgfAbsFun> absfun = read_absfun_only();
+
+    PgfProbspace funs_by_cat =
+        probspace_insert(abstract->funs_by_cat, absfun);
+    abstract->funs_by_cat = funs_by_cat;
+
+    return absfun;
+}
+
+ref<PgfAbsFun> PgfReader::merge_absfun()
+{
+    ref<PgfAbsFun> absfun = read_absfun_only();
+
+    if (namespace_lookup(abstract->funs, &absfun->name) == 0) {
+        throw pgf_error("The set of abstract functions is merged PGFs must be the same");
+    }
+
     return absfun;
 }
 
 ref<PgfAbsCat> PgfReader::read_abscat()
 {
     ref<PgfAbsCat> abscat = read_name<PgfAbsCat>(&PgfAbsCat::name);
-    abscat->ref_count = 1;
-    abscat->context = read_vector<PgfHypo>(&PgfReader::read_hypo);
+    auto context = read_vector<PgfHypo>(&PgfReader::read_hypo);
+    abscat->context = context;
+    abscat->prob  = read_prob(&abscat->name);
+    return abscat;
+}
 
-    // for now we just read the set of functions per category and ignore them
-    size_t n_funs = read_len();
-    for (size_t i = 0; i < n_funs; i++) {
-        read_double();
-        read_name();
+struct PGF_INTERNAL_DECL PgfAbsCatCounts
+{
+    PgfText *name;
+    size_t n_nan_probs;
+    double probs_sum;
+    prob_t prob;
+};
+
+struct PGF_INTERNAL_DECL PgfProbItor : PgfItor
+{
+    Vector<PgfAbsCatCounts> *cats;
+};
+
+static
+PgfAbsCatCounts *find_counts(Vector<PgfAbsCatCounts> *cats, PgfText *name)
+{
+    size_t i = 0;
+    size_t j = cats->len-1;
+    while (i <= j) {
+        size_t k = (i+j)/2;
+        PgfAbsCatCounts *counts = &cats->data[k];
+        int cmp = textcmp(name, counts->name);
+        if (cmp < 0) {
+            j = k-1;
+        } else if (cmp > 0) {
+            i = k+1;
+        } else {
+            return counts;
+        }
     }
 
-    abscat->prob  = - log(read_double());
-    return abscat;
+    return NULL;
+}
+
+static
+void collect_counts(PgfItor *itor, PgfText *key, object value, PgfExn *err)
+{
+    PgfProbItor* prob_itor = (PgfProbItor*) itor;
+    ref<PgfAbsFun> absfun = value;
+
+    PgfAbsCatCounts *counts =
+        find_counts(prob_itor->cats, &absfun->type->name);
+    if (counts != NULL) {
+        if (isnan(absfun->prob)) {
+            counts->n_nan_probs++;
+        } else {
+            counts->probs_sum += exp(-absfun->prob);
+        }
+    }
+}
+
+static
+void pad_probs(PgfItor *itor, PgfText *key, object value, PgfExn *err)
+{
+    PgfProbItor* prob_itor = (PgfProbItor*) itor;
+    ref<PgfAbsFun> absfun = value;
+
+    if (isnan(absfun->prob)) {
+        PgfAbsCatCounts *counts =
+            find_counts(prob_itor->cats, &absfun->type->name);
+        if (counts != NULL) {
+            absfun->prob = counts->prob;
+        }
+    }
 }
 
 void PgfReader::read_abstract(ref<PgfAbstr> abstract)
 {
-    abstract->name = read_name();
-	abstract->aflags = read_namespace<PgfFlag>(&PgfReader::read_flag);
-    abstract->funs = read_namespace<PgfAbsFun>(&PgfReader::read_absfun);
-    abstract->cats = read_namespace<PgfAbsCat>(&PgfReader::read_abscat);
+    this->abstract = abstract;
+    abstract->funs_by_cat = 0;
+
+    auto name = read_name();
+    auto aflags = read_namespace<PgfFlag>(&PgfReader::read_flag);
+    auto funs = read_namespace<PgfAbsFun>(&PgfReader::read_absfun);
+    auto cats = read_namespace<PgfAbsCat>(&PgfReader::read_abscat);
+
+    abstract->name = name;
+    abstract->aflags = aflags;
+    abstract->funs = funs;
+    abstract->cats = cats;
+
+    if (probs_callback != NULL) {
+        PgfExn err;
+        err.type = PGF_EXN_NONE;
+
+        PgfProbItor itor;
+        itor.cats = namespace_to_sorted_names<PgfAbsCat,PgfAbsCatCounts>(abstract->cats);
+
+        itor.fn = collect_counts;
+        namespace_iter(abstract->funs, &itor, &err);
+
+        for (size_t i = 0; i < itor.cats->len; i++) {
+            PgfAbsCatCounts *counts = &itor.cats->data[i];
+            counts->prob = - logf((1-counts->probs_sum) / counts->n_nan_probs);
+        }
+
+        itor.fn = pad_probs;
+        namespace_iter(abstract->funs, &itor, &err);
+
+        free(itor.cats);
+    }
+}
+
+void PgfReader::merge_abstract(ref<PgfAbstr> abstract)
+{
+    this->abstract = abstract;
+
+    ref<PgfText> name = read_name();
+    int cmp = textcmp(&(*abstract->name), &(*name));
+    text_db_release(name);
+    if (cmp != 0)
+        throw pgf_error("The abstract syntax names doesn't match");
+
+	merge_namespace<PgfFlag>(&PgfReader::read_flag);
+    merge_namespace<PgfAbsFun>(&PgfReader::merge_absfun);
+    merge_namespace<PgfAbsCat>(&PgfReader::read_abscat);
+}
+
+ref<PgfLParam> PgfReader::read_lparam()
+{
+    size_t i0 = read_int();
+    size_t n_terms = read_len();
+    ref<PgfLParam> lparam =
+        PgfDB::malloc<PgfLParam>(n_terms*sizeof(PgfLParam::terms[0]));
+    lparam->i0 = i0;
+    lparam->n_terms = n_terms;
+
+    for (size_t i = 0; i < n_terms; i++) {
+        lparam->terms[i].factor = read_int();
+        lparam->terms[i].var    = read_int();
+    }
+
+    return lparam;
+}
+
+void PgfReader::read_variable_range(ref<PgfVariableRange> var_info)
+{
+    var_info->var   = read_int();
+    var_info->range = read_int();
+}
+
+void PgfReader::read_parg(ref<PgfPArg> parg)
+{
+    auto param = read_lparam(); parg->param = param;
+}
+
+ref<PgfPResult> PgfReader::read_presult()
+{
+    ref<Vector<PgfVariableRange>> vars = 0;
+    size_t n_vars = read_len();
+    if (n_vars > 0) {
+        vars = vector_new<PgfVariableRange>(n_vars);
+        for (size_t i = 0; i < n_vars; i++) {
+            read_variable_range(vector_elem(vars,i));
+        }
+    }
+
+    size_t i0 = read_int();
+    size_t n_terms = read_len();
+    ref<PgfPResult> res =
+        PgfDB::malloc<PgfPResult>(n_terms*sizeof(PgfLParam::terms[0]));
+    res->vars = vars;
+    res->param.i0 = i0;
+    res->param.n_terms = n_terms;
+
+    for (size_t i = 0; i < n_terms; i++) {
+        res->param.terms[i].factor = read_int();
+        res->param.terms[i].var    = read_int();
+    }
+
+    return res;
+}
+
+template<class I>
+ref<I> PgfReader::read_symbol_idx()
+{
+    size_t d = read_int();
+    size_t i0 = read_int();
+    size_t n_terms = read_len();
+    ref<I> sym_idx =
+        PgfDB::malloc<I>(n_terms*sizeof(PgfLParam::terms[0]));
+    sym_idx->d = d;
+    sym_idx->r.i0 = i0;
+    sym_idx->r.n_terms = n_terms;
+
+    for (size_t i = 0; i < n_terms; i++) {
+        sym_idx->r.terms[i].factor = read_int();
+        sym_idx->r.terms[i].var    = read_int();
+    }
+
+    return sym_idx;
+}
+
+PgfSymbol PgfReader::read_symbol()
+{
+    PgfSymbol sym = 0;
+
+    uint8_t tag = read_tag();
+    switch (tag) {
+	case PgfSymbolCat::tag: {
+        ref<PgfSymbolCat> sym_cat = read_symbol_idx<PgfSymbolCat>();
+        sym = sym_cat.tagged();
+		break;
+    }
+	case PgfSymbolLit::tag: {
+        ref<PgfSymbolLit> sym_lit = read_symbol_idx<PgfSymbolLit>();
+        sym = sym_lit.tagged();
+		break;
+    }
+	case PgfSymbolVar::tag: {
+        ref<PgfSymbolVar> sym_var = PgfDB::malloc<PgfSymbolVar>();
+        sym_var->d = read_int();
+        sym_var->r = read_int();
+        sym = sym_var.tagged();
+		break;
+    }
+	case PgfSymbolKS::tag: {
+        ref<PgfSymbolKS> sym_ks = read_text(&PgfSymbolKS::token);
+        sym = sym_ks.tagged();
+		break;
+    }
+	case PgfSymbolKP::tag: {
+        size_t n_alts = read_len();
+        ref<PgfSymbolKP> sym_kp = PgfDB::malloc<PgfSymbolKP>(n_alts*sizeof(PgfAlternative));
+        sym_kp->alts.len = n_alts;
+
+        for (size_t i = 0; i < n_alts; i++) {
+            auto form     = read_seq();
+            auto prefixes = read_vector(&PgfReader::read_text2);
+
+            sym_kp->alts.data[i].form     = form;
+            sym_kp->alts.data[i].prefixes = prefixes;
+        }
+
+        auto default_form = read_seq();
+        sym_kp->default_form = default_form;
+
+        sym = sym_kp.tagged();
+		break;
+    }
+	case PgfSymbolBIND::tag: {
+        sym = ref<PgfSymbolBIND>(0).tagged();
+		break;
+    }
+	case PgfSymbolSOFTBIND::tag: {
+        sym = ref<PgfSymbolSOFTBIND>(0).tagged();
+		break;
+    }
+	case PgfSymbolNE::tag: {
+        sym = ref<PgfSymbolNE>(0).tagged();
+		break;
+    }
+	case PgfSymbolSOFTSPACE::tag: {
+        sym = ref<PgfSymbolSOFTSPACE>(0).tagged();
+		break;
+    }
+	case PgfSymbolCAPIT::tag: {
+        sym = ref<PgfSymbolCAPIT>(0).tagged();
+		break;
+    }
+	case PgfSymbolALLCAPIT::tag: {
+        sym = ref<PgfSymbolALLCAPIT>(0).tagged();
+		break;
+    }
+	default:
+		throw pgf_error("Unknown symbol tag");
+    }
+
+    return sym;
+}
+
+ref<PgfSequence> PgfReader::read_seq()
+{
+	size_t n_syms = read_len();
+
+	ref<PgfSequence> seq = PgfDB::malloc<PgfSequence>(n_syms*sizeof(PgfSymbol));
+    seq->syms.len  = n_syms;
+
+    for (size_t i = 0; i < n_syms; i++) {
+        PgfSymbol sym = read_symbol();
+        *vector_elem(&seq->syms,i) = sym;
+    }
+
+    return seq;
+}
+
+ref<Vector<ref<PgfSequence>>> PgfReader::read_seq_ids(ref<PgfConcrLincat> lincat, object container)
+{
+    size_t len = read_len();
+    ref<Vector<ref<PgfSequence>>> vec = vector_new<ref<PgfSequence>>(len);
+    for (size_t i = 0; i < len; i++) {
+        size_t seq_id = read_len();
+        ref<PgfSequence> seq = phrasetable_relink(concrete->phrasetable,
+                                                  lincat, container, i,
+                                                  seq_id);
+        if (seq == 0) {
+            throw pgf_error("Invalid sequence id");
+        }
+        *vector_elem(vec,i) = seq;
+    }
+    return vec;
+}
+
+PgfPhrasetable PgfReader::read_phrasetable(size_t len)
+{
+    if (len == 0)
+        return 0;
+
+    PgfPhrasetableEntry value;
+
+    size_t half = len/2;
+    PgfPhrasetable left  = read_phrasetable(half);
+    value.seq = read_seq();
+    value.backrefs = 0;
+    PgfPhrasetable right = read_phrasetable(len-half-1);
+
+    PgfPhrasetable table = Node<PgfPhrasetableEntry>::new_node(value);
+    table->sz    = 1+Node<PgfPhrasetableEntry>::size(left)+Node<PgfPhrasetableEntry>::size(right);
+    table->left  = left;
+    table->right = right;
+    return table;
+}
+
+PgfPhrasetable PgfReader::read_phrasetable()
+{
+    size_t len = read_len();
+    return read_phrasetable(len);
+}
+
+ref<PgfConcrLincat> PgfReader::read_lincat()
+{
+    ref<PgfConcrLincat> lincat = read_name(&PgfConcrLincat::name);
+
+    auto fields = read_lincat_fields(lincat);
+    auto n_lindefs = read_len();
+    auto args = read_vector(&PgfReader::read_parg);
+    auto res  = read_vector(&PgfReader::read_presult2);
+    auto seqs = read_seq_ids(0, lincat.tagged());
+
+    lincat->abscat = namespace_lookup(abstract->cats, &lincat->name);
+    lincat->fields = fields;
+    lincat->n_lindefs = n_lindefs;
+    lincat->args = args;
+    lincat->res  = res;
+    lincat->seqs = seqs;
+    return lincat;
+}
+
+ref<Vector<ref<PgfText>>> PgfReader::read_lincat_fields(ref<PgfConcrLincat> lincat)
+{
+    size_t len = read_len();
+    ref<Vector<ref<PgfText>>> fields = vector_new<ref<PgfText>>(len);
+    for (size_t i = 0; i < len; i++) {
+        auto name = read_text();
+        *vector_elem(fields,i) = name;
+    }
+    return fields;
+}
+
+ref<PgfConcrLin> PgfReader::read_lin()
+{
+    ref<PgfConcrLin> lin = read_name(&PgfConcrLin::name);
+    lin->absfun = namespace_lookup(abstract->funs, &lin->name);
+    if (lin->absfun == 0)
+        throw pgf_error("Found a lin without a fun");
+    lin->lincat =
+        namespace_lookup(concrete->lincats, &lin->absfun->type->name);
+    if (lin->lincat == 0)
+        throw pgf_error("Found a lin which uses a category without a lincat");
+
+    auto args = read_vector(&PgfReader::read_parg);
+    auto res  = read_vector(&PgfReader::read_presult2);
+    auto seqs = read_seq_ids(lin->lincat, lin.tagged());
+
+    lin->args = args;
+    lin->res  = res;
+    lin->seqs = seqs;
+
+    return lin;
+}
+
+ref<PgfConcrPrintname> PgfReader::read_printname()
+{
+    ref<PgfConcrPrintname> printname = read_name(&PgfConcrPrintname::name);
+    printname->printname = read_text();
+    return printname;
+}
+
+ref<PgfConcr> PgfReader::read_concrete()
+{
+    concrete = read_name(&PgfConcr::name);
+
+	auto cflags = read_namespace<PgfFlag>(&PgfReader::read_flag);
+	concrete->cflags = cflags;
+
+	auto phrasetable = read_phrasetable();
+	concrete->phrasetable = phrasetable;
+
+	auto lincats = read_namespace<PgfConcrLincat>(&PgfReader::read_lincat);
+	concrete->lincats = lincats;
+
+	auto lins = read_namespace<PgfConcrLin>(&PgfReader::read_lin);
+	concrete->lins = lins;
+
+	auto printnames = read_namespace<PgfConcrPrintname>(&PgfReader::read_printname);
+	concrete->printnames = printnames;
+
+    PgfLRTableMaker maker(abstract, concrete);
+    concrete->lrtable = maker.make();
+
+    return concrete;
 }
 
 ref<PgfPGF> PgfReader::read_pgf()
 {
-    ref<PgfPGF> pgf = PgfDB::malloc<PgfPGF>(master_size+1);
+    ref<PgfPGF> pgf = PgfDB::malloc<PgfPGF>();
 
-    pgf->ref_count = 1;
     pgf->major_version = read_u16be();
     pgf->minor_version = read_u16be();
 
@@ -441,15 +790,38 @@ ref<PgfPGF> PgfReader::read_pgf()
         throw pgf_error("Unsupported format version");
     }
 
-    pgf->gflags = read_namespace<PgfFlag>(&PgfReader::read_flag);
+    auto gflags = read_namespace<PgfFlag>(&PgfReader::read_flag);
+    pgf->gflags = gflags;
 
     read_abstract(ref<PgfAbstr>::from_ptr(&pgf->abstract));
 
-    pgf->prev = 0;
-    pgf->next = 0;
-
-    pgf->name.size = master_size;
-    memcpy(&pgf->name.text, master_text, master_size+1);
+    auto concretes = read_namespace<PgfConcr>(&PgfReader::read_concrete);
+    pgf->concretes = concretes;
 
     return pgf;
+}
+
+void PgfReader::merge_pgf(ref<PgfPGF> pgf)
+{
+    uint16_t major_version = read_u16be();
+    uint16_t minor_version = read_u16be();
+
+    if (pgf->major_version != PGF_MAJOR_VERSION ||
+        pgf->minor_version != PGF_MINOR_VERSION) {
+        throw pgf_error("Unsupported format version");
+    }
+
+    merge_namespace<PgfFlag>(&PgfReader::read_flag); // ??
+
+    merge_abstract(ref<PgfAbstr>::from_ptr(&pgf->abstract));
+
+    size_t len = read_len();
+    for (size_t i = 0; i < len; i++) {
+        ref<PgfConcr> concr = PgfReader::read_concrete();
+        Namespace<PgfConcr> concretes =
+            namespace_insert(pgf->concretes, concr);
+        if (concretes == 0)
+            throw pgf_error("One and the same concrete syntax is included in several PGF files");
+        pgf->concretes = concretes;
+    }
 }
